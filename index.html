@@ -43,14 +43,14 @@
         }
 
         .resize-handle {
-            position: absolute;
-            width: 12px;
-            height: 12px;
-            border: 2px solid white;
-            background: red;
+            position: fixed;
+            width: 18px;
+            height: 18px;
+            border: 3px solid black;
+            background: yellow;
             box-sizing: border-box;
             cursor: nwse-resize;
-            z-index: 1000;
+            z-index: 99999;
         }
     </style>
 </head>
@@ -156,8 +156,8 @@
 
             const rect = image.getBoundingClientRect();
 
-            handle.style.left = (rect.right - 6) + "px";
-            handle.style.top = (rect.bottom - 6) + "px";
+            handle.style.left = (rect.right - 9) + "px";
+            handle.style.top = (rect.bottom - 9) + "px";
         };
 
         handle.addEventListener("mousedown", event => {
@@ -190,11 +190,7 @@
             document.addEventListener("mouseup", stopResize);
         });
 
-        const observer = new ResizeObserver(updateHandle);
-        observer.observe(image);
-
         image._resizeHandle = handle;
-        image._resizeObserver = observer;
 
         updateHandle();
     }
@@ -205,10 +201,7 @@
             image._resizeHandle = null;
         }
 
-        if (image._resizeObserver) {
-            image._resizeObserver.disconnect();
-            image._resizeObserver = null;
-        }
+        
     }
 </script>
 
