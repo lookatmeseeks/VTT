@@ -26,63 +26,15 @@
             overflow: hidden;
         }
 
-        .image-container {
+        .image {
             position: absolute;
-            transform-origin: center center;
-        }
-
-        .image-container img {
-            display: block;
-            width: 100%;
-            height: 100%;
-            user-select: none;
-            pointer-events: none;
-        }
-
-        .image-container.selected {
-            outline: 2px solid white;
-        }
-
-        .handle {
-            position: absolute;
-            width: 12px;
-            height: 12px;
-            background: white;
-            border: 1px solid black;
-            box-sizing: border-box;
-            display: none;
-        }
-
-        .selected .handle {
-            display: block;
-        }
-
-        .resize-handle {
-            right: -7px;
-            bottom: -7px;
-            cursor: nwse-resize;
-        }
-
-        .rotate-handle {
-            left: 50%;
-            top: -35px;
-            transform: translateX(-50%);
-            border-radius: 50%;
+            max-width: none;
             cursor: grab;
+            user-select: none;
         }
 
-        .rotate-line {
-            position: absolute;
-            left: 50%;
-            top: -24px;
-            width: 1px;
-            height: 24px;
-            background: white;
-            display: none;
-        }
-
-        .selected .rotate-line {
-            display: block;
+        .image:active {
+            cursor: grabbing;
         }
     </style>
 </head>
@@ -93,8 +45,6 @@
 
 <script>
     const canvas = document.getElementById("canvas");
-
-    let selected = null;
 
     canvas.addEventListener("dragover", event => {
         event.preventDefault();
@@ -112,172 +62,48 @@
 
             const image = document.createElement("img");
 
-            image.onload = () => {
-                const container = document.createElement("div");
+            image.className = "image";
+            image.src = URL.createObjectURL(file);
 
-                container.className = "image-container";
+            image.style.left = event.clientX + "px";
+            image.style.top = event.clientY + "px";
 
-                container.style.width = image.naturalWidth + "px";
-                container.style.height = image.naturalHeight + "px";
+            canvas.appendChild(image);
 
-                container.style.left =
-                    (event.clientX - image.naturalWidth / 2) + "px";
-
-                container.style.top =
-                    (event.clientY - image.naturalHeight / 2) + "px";
-
-                container.dataset.rotation = "0";
-
-                image.src = URL.createObjectURL(file);
-
-                container.appendChild(image);
-
-                const resizeHandle = document.createElement("div");
-                resizeHandle.className = "handle resize-handle";
-
-                const rotateHandle = document.createElement("div");
-                rotateHandle.className = "handle rotate-handle";
-
-                const rotateLine = document.createElement("div");
-                rotateLine.className = "rotate-line";
-
-                container.appendChild(resizeHandle);
-                container.appendChild(rotateHandle);
-                container.appendChild(rotateLine);
-
-                canvas.appendChild(container);
-
-                makeInteractive(container);
-            };
+            makeDraggable(image);
         }
     });
 
-    canvas.addEventListener("mousedown", event => {
-        if (event.target === canvas) {
-            deselect();
-        }
-    });
+    function makeDraggable(image) {
+        let dragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
 
-    function select(container) {
-        if (selected) {
-            selected.classList.remove("selected");
-        }
+        image.addEventListener("mousedown", event => {
+            dragging = true;
 
-        selected = container;
-        selected.classList.add("selected");
-    }
+            const rect = image.getBoundingClientRect();
 
-    function deselect() {
-        if (!selected) {
-            return;
-        }
+            offsetX = event.clientX - rect.left;
+            offsetY = event.clientY - rect.top;
 
-        selected.classList.remove("selected");
-        selected = null;
-    }
+            event.preventDefault();
+        });
 
-    function makeInteractive(container) {
-        const image = container.querySelector("img");
-        const resizeHandle = container.querySelector(".resize-handle");
-        const rotateHandle = container.querySelector(".rotate-handle");
-
-        container.addEventListener("mousedown", event => {
-            if (
-                event.target === resizeHandle ||
-                event.target === rotateHandle
-            ) {
+        document.addEventListener("mousemove", event => {
+            if (!dragging) {
                 return;
             }
 
-            select(container);
+            image.style.left =
+                (event.clientX - offsetX) + "px";
 
-            const startX = event.clientX;
-            const startY = event.clientY;
-
-            const startLeft = container.offsetLeft;
-            const startTop = container.offsetTop;
-
-            function move(event) {
-                container.style.left =
-                    startLeft + (event.clientX - startX) + "px";
-
-                container.style.top =
-                    startTop + (event.clientY - startY) + "px";
-            }
-
-            function stop() {
-                document.removeEventListener("mousemove", move);
-                document.removeEventListener("mouseup", stop);
-            }
-
-            document.addEventListener("mousemove", move);
-            document.addEventListener("mouseup", stop);
-
-            event.preventDefault();
+            image.style.top =
+                (event.clientY - offsetY) + "px";
         });
 
-        resizeHandle.addEventListener("mousedown", event => {
-            select(container);
-
-            const startX = event.clientX;
-            const startWidth = container.offsetWidth;
-            const startHeight = container.offsetHeight;
-
-            function resize(event) {
-                const newWidth =
-                    Math.max(20, startWidth + (event.clientX - startX));
-
-                const ratio = startHeight / startWidth;
-
-                container.style.width = newWidth + "px";
-                container.style.height = (newWidth * ratio) + "px";
-            }
-
-            function stop() {
-                document.removeEventListener("mousemove", resize);
-                document.removeEventListener("mouseup", stop);
-            }
-
-            document.addEventListener("mousemove", resize);
-            document.addEventListener("mouseup", stop);
-
-            event.preventDefault();
-            event.stopPropagation();
-        });
-
-        rotateHandle.addEventListener("mousedown", event => {
-            select(container);
-
-            const rect = container.getBoundingClientRect();
-
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-
-            function rotate(event) {
-                const angle =
-                    Math.atan2(
-                        event.clientY - centerY,
-                        event.clientX - centerX
-                    ) * 180 / Math.PI;
-
-                const rotation = angle + 90;
-
-                container.dataset.rotation = rotation;
-
-                container.style.transform =
-                    `rotate(${rotation}deg)`;
-            }
-
-            function stop() {
-                document.removeEventListener("mousemove", rotate);
-                document.removeEventListener("mouseup", stop);
-            }
-
-            document.addEventListener("mousemove", rotate);
-            document.addEventListener("mouseup", stop);
-
-            event.preventDefault();
-            event.stopPropagation();
+        document.addEventListener("mouseup", () => {
+            dragging = false;
         });
     }
 </script>
