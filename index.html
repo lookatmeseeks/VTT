@@ -43,7 +43,7 @@
         }
 
         .resize-handle {
-            position: fixed;
+            position: absolute;
             width: 18px;
             height: 18px;
             border: 3px solid black;
@@ -51,6 +51,22 @@
             box-sizing: border-box;
             cursor: nwse-resize;
             z-index: 99999;
+        }
+
+        .rotate-handle {
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            border: 3px solid black;
+            background: orange;
+            border-radius: 50%;
+            box-sizing: border-box;
+            cursor: grab;
+            z-index: 99999;
+        }
+
+        .rotate-handle:active {
+            cursor: grabbing;
         }
     </style>
 </head>
@@ -148,7 +164,11 @@
         const handle = document.createElement("div");
         handle.className = "resize-handle";
 
+        const rotateHandle = document.createElement("div");
+        rotateHandle.className = "rotate-handle";
+
         canvas.appendChild(handle);
+        canvas.appendChild(rotateHandle);
 
         const updateHandle = () => {
             if (!image.classList.contains("selected")) {
@@ -165,7 +185,49 @@
 
             handle.style.top =
                 (rect.bottom - canvasRect.top - 9) + "px";
+
+            rotateHandle.style.left =
+                (rect.left - canvasRect.left + rect.width / 2 - 9) + "px";
+
+            rotateHandle.style.top =
+                (rect.top - canvasRect.top - 32) + "px";
         };
+
+        rotateHandle.addEventListener("mousedown", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const rect = image.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const startAngle = Math.atan2(
+                event.clientY - centerY,
+                event.clientX - centerX
+            );
+
+            const currentRotation = image._rotation || 0;
+
+            const rotate = moveEvent => {
+                const angle = Math.atan2(
+                    moveEvent.clientY - centerY,
+                    moveEvent.clientX - centerX
+                );
+
+                const delta = (angle - startAngle) * 180 / Math.PI;
+                image._rotation = currentRotation + delta;
+                image.style.transform = "rotate(" + image._rotation + "deg)";
+
+                updateHandle();
+            };
+
+            const stopRotate = () => {
+                document.removeEventListener("mousemove", rotate);
+                document.removeEventListener("mouseup", stopRotate);
+            };
+
+            document.addEventListener("mousemove", rotate);
+            document.addEventListener("mouseup", stopRotate);
+        });
 
         handle.addEventListener("mousedown", event => {
             event.preventDefault();
@@ -198,6 +260,7 @@
         });
 
         image._resizeHandle = handle;
+        image._rotateHandle = rotateHandle;
         image._updateResizeHandle = updateHandle;
 
         updateHandle();
@@ -213,6 +276,11 @@
         if (image._resizeHandle) {
             image._resizeHandle.remove();
             image._resizeHandle = null;
+        }
+
+        if (image._rotateHandle) {
+            image._rotateHandle.remove();
+            image._rotateHandle = null;
         }
 
         image._updateResizeHandle = null;
