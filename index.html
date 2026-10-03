@@ -132,7 +132,7 @@
         event.preventDefault();
     });
 
-    canvas.addEventListener("drop", event => {
+    canvas.addEventListener("drop", async event => {
         event.preventDefault();
 
         const files = event.dataTransfer.files;
@@ -142,10 +142,27 @@
                 continue;
             }
 
+            const fileName = crypto.randomUUID() + "-" + file.name;
+
+            const { error: uploadError } = await supabaseClient
+                .storage
+                .from("images")
+                .upload(fileName, file);
+
+            if (uploadError) {
+                console.error("Failed to upload image:", uploadError);
+                continue;
+            }
+
+            const { data: publicUrlData } = supabaseClient
+                .storage
+                .from("images")
+                .getPublicUrl(fileName);
+
             const image = document.createElement("img");
 
             image.className = "image";
-            image.src = URL.createObjectURL(file);
+            image.src = publicUrlData.publicUrl;
 
             image.style.left = event.clientX + "px";
             image.style.top = event.clientY + "px";
