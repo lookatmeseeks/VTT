@@ -126,6 +126,87 @@
         console.log("Created room:", roomId, roomState);
     }
 
+    async function saveRoom() {
+        const { error } = await supabaseClient
+            .from("rooms")
+            .update({
+                state: roomState,
+                updated_at: new Date().toISOString()
+            })
+            .eq("id", roomId);
+
+        if (error) {
+            console.error("Failed to save room:", error);
+        }
+    }
+
+    function createImageFromState(imageState) {
+        const image = document.createElement("img");
+
+        image.className = "image";
+        image.src = imageState.url;
+
+        image.style.left = imageState.left + "px";
+        image.style.top = imageState.top + "px";
+
+        if (imageState.width) {
+            image.style.width = imageState.width + "px";
+        }
+
+        if (imageState.height) {
+            image.style.height = imageState.height + "px";
+        }
+
+        image._rotation = imageState.rotation || 0;
+        image.style.transform = "rotate(" + image._rotation + "deg)";
+
+        canvas.appendChild(image);
+        makeDraggable(image);
+
+        return image;
+    }
+
+    async function initializeRoom() {
+        const { data, error } = await supabaseClient
+            .from("rooms")
+            .select("state")
+            .eq("id", roomId)
+            .maybeSingle();
+
+        if (error) {
+            console.error("Failed to load room:", error);
+            return;
+        }
+
+        if (data) {
+            roomState = data.state;
+            console.log("Loaded room:", roomId, roomState);
+
+            for (const imageState of roomState.images || []) {
+                createImageFromState(imageState);
+            }
+
+            return;
+        }
+
+        const { data: created, error: createError } = await supabaseClient
+            .from("rooms")
+            .insert({
+                id: roomId,
+                state: roomState
+            })
+            .select("state")
+            .single();
+
+        if (createError) {
+            console.error("Failed to create room:", createError);
+            return;
+        }
+
+        roomState = created.state;
+        console.log("Created room:", roomId, roomState);
+    }
+
     initializeRoom();
 
     canvas.addEventListener("dragover", event => {
@@ -161,25 +242,30 @@
 
             console.log("Generated image URL:", publicUrlData.publicUrl);
 
-            const image = document.createElement("img");
+            const imageState = {
+                url: publicUrlData.publicUrl,
+                left: event.clientX,
+                top: event.clientY,
+                width: 0,
+                height: 0,
+                rotation: 0
+            };
 
-            image.className = "image";
-            image.src = publicUrlData.publicUrl;
+            const image = createImageFromState(imageState);
 
-            image.onload = () => {
-                console.log("Image loaded:", publicUrlData.publicUrl);
+            image.onload = async () => {
+                imageState.width = image.naturalWidth;
+                imageState.height = image.naturalHeight;
+
+                roomState.images.push(imageState);
+                await saveRoom();
+
+                console.log("Saved image to room:", imageState);
             };
 
             image.onerror = () => {
                 console.error("Image failed to load:", publicUrlData.publicUrl);
             };
-
-            image.style.left = event.clientX + "px";
-            image.style.top = event.clientY + "px";
-
-            canvas.appendChild(image);
-
-            makeDraggable(image);
         }
     });
 
