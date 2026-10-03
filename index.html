@@ -676,10 +676,10 @@
                 image.style.height = newHeight + "px";
 
                 image.style.left =
-                    (centerX - canvasRect.left - newWidth / 2) + "px";
+                    (screenToWorldX(centerX) - newWidth / 2) + "px";
 
                 image.style.top =
-                    (centerY - canvasRect.top - newHeight / 2) + "px";
+                    (screenToWorldY(centerY) - newHeight / 2) + "px";
 
                 updateHandle();
             };
