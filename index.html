@@ -81,7 +81,7 @@
 
     const SUPABASE_URL = "https://wpkbykftykssrlevutsm.supabase.co";
     const SUPABASE_KEY = "sb_publishable_bbq3qtA1tjGvoRXpsOO0OQ_ujSswI91";
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const roomId =
         new URLSearchParams(window.location.search).get("room") || "default";
@@ -91,7 +91,7 @@
     };
 
     async function initializeRoom() {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from("rooms")
             .select("state")
             .eq("id", roomId)
@@ -108,7 +108,7 @@
             return;
         }
 
-        const { data: created, error: createError } = await supabase
+        const { data: created, error: createError } = await supabaseClient
             .from("rooms")
             .insert({
                 id: roomId,
