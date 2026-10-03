@@ -133,6 +133,14 @@
             "translate(" + viewX + "px, " + viewY + "px) scale(" + zoom + ")";
     }
 
+    function screenToWorldX(x) {
+        return (x - viewX) / zoom;
+    }
+
+    function screenToWorldY(y) {
+        return (y - viewY) / zoom;
+    }
+
     updateView();
 
     canvas.addEventListener("mousedown", event => {
@@ -374,8 +382,8 @@
             const imageState = {
                 id: crypto.randomUUID(),
                 url: publicUrlData.publicUrl,
-                left: event.clientX,
-                top: event.clientY,
+                left: screenToWorldX(event.clientX),
+                top: screenToWorldY(event.clientY),
                 width: 0,
                 height: 0,
                 rotation: 0,
@@ -459,8 +467,8 @@
 
             const rect = image.getBoundingClientRect();
 
-            offsetX = event.clientX - rect.left;
-            offsetY = event.clientY - rect.top;
+            offsetX = (event.clientX - rect.left) / zoom;
+            offsetY = (event.clientY - rect.top) / zoom;
 
             event.preventDefault();
         });
@@ -471,10 +479,10 @@
             }
 
             image.style.left =
-                (event.clientX - offsetX) + "px";
+                screenToWorldX(event.clientX) - offsetX + "px";
 
             image.style.top =
-                (event.clientY - offsetY) + "px";
+                screenToWorldY(event.clientY) - offsetY + "px";
 
             updateResizeHandle(image);
         });
@@ -534,6 +542,8 @@
 
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
+            const worldCenterX = screenToWorldX(centerX);
+            const worldCenterY = screenToWorldY(centerY);
             const width = image.offsetWidth;
             const height = image.offsetHeight;
             const angle = (image._rotation || 0) * Math.PI / 180;
@@ -548,22 +558,22 @@
             const lockPointPosition = rotatePoint(-width / 2, -height / 2);
 
             handle.style.left =
-                (resizePoint.x - canvasRect.left - 9) + "px";
+                (screenToWorldX(resizePoint.x) - 9) + "px";
 
             handle.style.top =
-                (resizePoint.y - canvasRect.top - 9) + "px";
+                (screenToWorldY(resizePoint.y) - 9) + "px";
 
             rotateHandle.style.left =
-                (rotatePointPosition.x - canvasRect.left - 9) + "px";
+                (screenToWorldX(rotatePointPosition.x) - 9) + "px";
 
             rotateHandle.style.top =
-                (rotatePointPosition.y - canvasRect.top - 9) + "px";
+                (screenToWorldY(rotatePointPosition.y) - 9) + "px";
 
             lockHandle.style.left =
-                (lockPointPosition.x - canvasRect.left - lockHandle.offsetWidth - 6) + "px";
+                (screenToWorldX(lockPointPosition.x) - lockHandle.offsetWidth / zoom - 6) + "px";
 
             lockHandle.style.top =
-                (lockPointPosition.y - canvasRect.top - lockHandle.offsetHeight - 6) + "px";
+                (screenToWorldY(lockPointPosition.y) - lockHandle.offsetHeight / zoom - 6) + "px";
 
             const currentImageState = getImageState(image);
             const currentLocked = currentImageState && currentImageState.locked;
