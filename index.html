@@ -465,58 +465,98 @@
                 return;
             }
 
-            // Let clicks pass through transparent parts of the image so an
-            // image underneath can be selected.
             const rect = image.getBoundingClientRect();
-            const localX = (event.clientX - rect.left) / zoom;
-            const localY = (event.clientY - rect.top) / zoom;
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
 
-            const canvasPoint = document.createElement("canvas");
-            canvasPoint.width = 1;
-            canvasPoint.height = 1;
-            const context = canvasPoint.getContext("2d", { willReadFrequently: true });
-
-            const sourceWidth = image.naturalWidth;
-            const sourceHeight = image.naturalHeight;
-
-            if (!sourceWidth || !sourceHeight) {
-                return;
-            }
-
-            // Convert the screen point into the image's unrotated local space.
-            const centerX = image.offsetWidth / 2;
-            const centerY = image.offsetHeight / 2;
+            // Convert the screen point back into the image's unrotated local
+            // coordinates. rect is the rotated bounding box, so use the
+            // actual displayed center and undo the image rotation.
+            const dx = (event.clientX - centerX) / zoom;
+            const dy = (event.clientY - centerY) / zoom;
             const angle = -(image._rotation || 0) * Math.PI / 180;
-            const dx = localX - centerX;
-            const dy = localY - centerY;
 
-            const imageX = dx * Math.cos(angle) - dy * Math.sin(angle) + centerX;
-            const imageY = dx * Math.sin(angle) + dy * Math.cos(angle) + centerY;
+            const localX =
+                dx * Math.cos(angle) -
+                dy * Math.sin(angle) +
+                image.offsetWidth / 2;
 
-            const sourceX = imageX / image.offsetWidth * sourceWidth;
-            const sourceY = imageY / image.offsetHeight * sourceHeight;
+            const localY =
+                dx * Math.sin(angle) +
+                dy * Math.cos(angle) +
+                image.offsetHeight / 2;
+
+            const sourceX =
+                localX / image.offsetWidth * image.naturalWidth;
+            const sourceY =
+                localY / image.offsetHeight * image.naturalHeight;
+
+            let opaque = false;
 
             if (
-                sourceX < 0 ||
-                sourceY < 0 ||
-                sourceX >= sourceWidth ||
-                sourceY >= sourceHeight
+                image.naturalWidth &&
+                image.naturalHeight &&
+                sourceX >= 0 &&
+                sourceY >= 0 &&
+                sourceX < image.naturalWidth &&
+                sourceY < image.naturalHeight
             ) {
-                return;
+                const canvasPoint = document.createElement("canvas");
+                canvasPoint.width = 1;
+                canvasPoint.height = 1;
+                const context = canvasPoint.getContext("2d", {
+                    willReadFrequently: true
+                });
+
+                // Sample the actual source pixel rather than drawing the
+                // whole image into the sample canvas.
+                context.drawImage(
+                    image,
+                    sourceX,
+                    sourceY,
+                    1,
+                    1,
+                    0,
+                    0,
+                    1,
+                    1
+                );
+
+                opaque = context.getImageData(0, 0, 1, 1).data[3] > 0;
             }
 
-            context.drawImage(
-                image,
-                -sourceX,
-                -sourceY,
-                image.offsetWidth,
-                image.offsetHeight
-            );
+            if (!opaque) {
+                // The browser sends the event to the top image even when the
+                // clicked pixel is transparent. Find the next image beneath
+                // it and let that image handle the same click.
+                const elements = document.elementsFromPoint(
+                    event.clientX,
+                    event.clientY
+                );
 
-            const alpha = context.getImageData(0, 0, 1, 1).data[3];
+                const nextImage = elements.find(element =>
+                    element.classList &&
+                    element.classList.contains("image") &&
+                    element !== image
+                );
 
-            if (alpha === 0) {
+                if (nextImage) {
+                    nextImage.dispatchEvent(new MouseEvent("mousedown", {
+                        bubbles: true,
+                        cancelable: true,
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                        button: 0,
+                        buttons: event.buttons,
+                        ctrlKey: event.ctrlKey,
+                        shiftKey: event.shiftKey,
+                        altKey: event.altKey,
+                        metaKey: event.metaKey
+                    }));
+                }
+
                 event.stopPropagation();
+                event.preventDefault();
                 return;
             }
 
