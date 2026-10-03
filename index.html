@@ -133,6 +133,8 @@
 
             image.style.top =
                 (event.clientY - offsetY) + "px";
+
+            updateResizeHandle(image);
         });
 
         document.addEventListener("mouseup", () => {
@@ -191,8 +193,15 @@
         });
 
         image._resizeHandle = handle;
+        image._updateResizeHandle = updateHandle;
 
         updateHandle();
+    }
+
+    function updateResizeHandle(image) {
+        if (image._updateResizeHandle) {
+            image._updateResizeHandle();
+        }
     }
 
     function removeResizeHandle(image) {
@@ -201,7 +210,7 @@
             image._resizeHandle = null;
         }
 
-        
+        image._updateResizeHandle = null;
     }
 </script>
 
