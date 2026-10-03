@@ -83,6 +83,51 @@
     const SUPABASE_KEY = "sb_publishable_bbq3qtA1tjGvoRXpsOO0OQ_ujSswI91";
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    const roomId =
+        new URLSearchParams(window.location.search).get("room") || "default";
+
+    let roomState = {
+        images: []
+    };
+
+    async function initializeRoom() {
+        const { data, error } = await supabase
+            .from("rooms")
+            .select("state")
+            .eq("id", roomId)
+            .maybeSingle();
+
+        if (error) {
+            console.error("Failed to load room:", error);
+            return;
+        }
+
+        if (data) {
+            roomState = data.state;
+            console.log("Loaded room:", roomId, roomState);
+            return;
+        }
+
+        const { data: created, error: createError } = await supabase
+            .from("rooms")
+            .insert({
+                id: roomId,
+                state: roomState
+            })
+            .select("state")
+            .single();
+
+        if (createError) {
+            console.error("Failed to create room:", createError);
+            return;
+        }
+
+        roomState = created.state;
+        console.log("Created room:", roomId, roomState);
+    }
+
+    initializeRoom();
+
     canvas.addEventListener("dragover", event => {
         event.preventDefault();
     });
