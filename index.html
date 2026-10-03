@@ -42,6 +42,15 @@
             outline-offset: 2px;
         }
 
+        #delete-button {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100000;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
         .resize-handle {
             position: absolute;
             width: 18px;
@@ -74,10 +83,13 @@
 
 <body>
 
-<div id="canvas"></div>
+<div id="canvas">
+    <button id="delete-button">Delete selected</button>
+</div>
 
 <script>
     const canvas = document.getElementById("canvas");
+    const deleteButton = document.getElementById("delete-button");
 
     const SUPABASE_URL = "https://wpkbykftykssrlevutsm.supabase.co";
     const SUPABASE_KEY = "sb_publishable_bbq3qtA1tjGvoRXpsOO0OQ_ujSswI91";
@@ -212,6 +224,31 @@
         });
 
     initializeRoom();
+
+    deleteButton.addEventListener("click", async event => {
+        event.stopPropagation();
+
+        const selectedImage = document.querySelector(".image.selected");
+
+        if (!selectedImage) {
+            return;
+        }
+
+        const imageState = getImageState(selectedImage);
+
+        if (!imageState) {
+            return;
+        }
+
+        removeResizeHandle(selectedImage);
+        selectedImage.remove();
+
+        roomState.images = roomState.images.filter(state =>
+            (state.id || state.url) !== selectedImage._stateId
+        );
+
+        await saveRoom();
+    });
 
     canvas.addEventListener("dragover", event => {
         event.preventDefault();
