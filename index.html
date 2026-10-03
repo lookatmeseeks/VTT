@@ -455,6 +455,71 @@
         let offsetY = 0;
 
         image.addEventListener("mousedown", event => {
+            // Middle mouse is reserved entirely for panning.
+            if (event.button === 1) {
+                return;
+            }
+
+            // Only the primary mouse button selects or drags images.
+            if (event.button !== 0) {
+                return;
+            }
+
+            // Let clicks pass through transparent parts of the image so an
+            // image underneath can be selected.
+            const rect = image.getBoundingClientRect();
+            const localX = (event.clientX - rect.left) / zoom;
+            const localY = (event.clientY - rect.top) / zoom;
+
+            const canvasPoint = document.createElement("canvas");
+            canvasPoint.width = 1;
+            canvasPoint.height = 1;
+            const context = canvasPoint.getContext("2d", { willReadFrequently: true });
+
+            const sourceWidth = image.naturalWidth;
+            const sourceHeight = image.naturalHeight;
+
+            if (!sourceWidth || !sourceHeight) {
+                return;
+            }
+
+            // Convert the screen point into the image's unrotated local space.
+            const centerX = image.offsetWidth / 2;
+            const centerY = image.offsetHeight / 2;
+            const angle = -(image._rotation || 0) * Math.PI / 180;
+            const dx = localX - centerX;
+            const dy = localY - centerY;
+
+            const imageX = dx * Math.cos(angle) - dy * Math.sin(angle) + centerX;
+            const imageY = dx * Math.sin(angle) + dy * Math.cos(angle) + centerY;
+
+            const sourceX = imageX / image.offsetWidth * sourceWidth;
+            const sourceY = imageY / image.offsetHeight * sourceHeight;
+
+            if (
+                sourceX < 0 ||
+                sourceY < 0 ||
+                sourceX >= sourceWidth ||
+                sourceY >= sourceHeight
+            ) {
+                return;
+            }
+
+            context.drawImage(
+                image,
+                -sourceX,
+                -sourceY,
+                image.offsetWidth,
+                image.offsetHeight
+            );
+
+            const alpha = context.getImageData(0, 0, 1, 1).data[3];
+
+            if (alpha === 0) {
+                event.stopPropagation();
+                return;
+            }
+
             document.querySelectorAll(".image.selected").forEach(other => {
                 if (other !== image) {
                     removeResizeHandle(other);
@@ -475,10 +540,10 @@
 
             dragging = true;
 
-            const rect = image.getBoundingClientRect();
+            const rectAfterSelection = image.getBoundingClientRect();
 
-            offsetX = (event.clientX - rect.left) / zoom;
-            offsetY = (event.clientY - rect.top) / zoom;
+            offsetX = (event.clientX - rectAfterSelection.left) / zoom;
+            offsetY = (event.clientY - rectAfterSelection.top) / zoom;
 
             event.preventDefault();
         });
