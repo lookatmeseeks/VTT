@@ -36,8 +36,15 @@
             transform-origin: 0 0;
         }
 
-        .image {
+        .image-container {
             position: absolute;
+            transform-origin: center center;
+        }
+
+        .image {
+            display: block;
+            width: 100%;
+            height: 100%;
             max-width: none;
             cursor: grab;
             user-select: none;
@@ -228,9 +235,9 @@
     }
 
     function renderRoomState() {
-        document.querySelectorAll(".image").forEach(image => {
-            removeResizeHandle(image);
-            image.remove();
+        document.querySelectorAll(".image-container").forEach(container => {
+            removeResizeHandle(container.querySelector(".image"));
+            container.remove();
         });
 
         for (const imageState of roomState.images || []) {
@@ -239,27 +246,33 @@
     }
 
     function createImageFromState(imageState) {
-        const image = document.createElement("img");
+        const container = document.createElement("div");
+        container.className = "image-container";
+        container._stateId = imageState.id || imageState.url;
 
-        image.className = "image";
-        image.src = imageState.url;
-        image._stateId = imageState.id || imageState.url;
-
-        image.style.left = imageState.left + "px";
-        image.style.top = imageState.top + "px";
+        container.style.left = imageState.left + "px";
+        container.style.top = imageState.top + "px";
 
         if (imageState.width) {
-            image.style.width = imageState.width + "px";
+            container.style.width = imageState.width + "px";
         }
 
         if (imageState.height) {
-            image.style.height = imageState.height + "px";
+            container.style.height = imageState.height + "px";
         }
 
-        image._rotation = imageState.rotation || 0;
-        image.style.transform = "rotate(" + image._rotation + "deg)";
+        container._rotation = imageState.rotation || 0;
+        container.style.transform = "rotate(" + container._rotation + "deg)";
 
-        world.appendChild(image);
+        const image = document.createElement("img");
+        image.className = "image";
+        image.src = imageState.url;
+        image._stateId = container._stateId;
+        image._container = container;
+
+        container.appendChild(image);
+        world.appendChild(container);
+
         makeDraggable(image);
 
         return image;
@@ -337,7 +350,7 @@
         }
 
         removeResizeHandle(selectedImage);
-        selectedImage.remove();
+        selectedImage._container.remove();
 
         roomState.images = roomState.images.filter(state =>
             (state.id || state.url) !== selectedImage._stateId
@@ -425,21 +438,23 @@
 
     async function saveImagePosition(image) {
         const imageState = getImageState(image);
+        const container = image._container;
 
-        if (!imageState) {
+        if (!imageState || !container) {
             return;
         }
 
-        imageState.left = parseFloat(image.style.left) || 0;
-        imageState.top = parseFloat(image.style.top) || 0;
-        imageState.width = image.offsetWidth;
-        imageState.height = image.offsetHeight;
-        imageState.rotation = image._rotation || 0;
+        imageState.left = parseFloat(container.style.left) || 0;
+        imageState.top = parseFloat(container.style.top) || 0;
+        imageState.width = container.offsetWidth;
+        imageState.height = container.offsetHeight;
+        imageState.rotation = container._rotation || 0;
 
         await saveRoom();
     }
 
     function makeDraggable(image) {
+        const container = image._container;
         let dragging = false;
         let offsetX = 0;
         let offsetY = 0;
@@ -465,8 +480,7 @@
 
             dragging = true;
 
-            const rect = image.getBoundingClientRect();
-
+            const rect = container.getBoundingClientRect();
             offsetX = (event.clientX - rect.left) / zoom;
             offsetY = (event.clientY - rect.top) / zoom;
 
@@ -478,13 +492,11 @@
                 return;
             }
 
-            image.style.left =
+            container.style.left =
                 screenToWorldX(event.clientX) - offsetX + "px";
 
-            image.style.top =
+            container.style.top =
                 screenToWorldY(event.clientY) - offsetY + "px";
-
-            updateResizeHandle(image);
         });
 
         document.addEventListener("mouseup", async () => {
@@ -500,14 +512,26 @@
     function addResizeHandle(image) {
         removeResizeHandle(image);
 
+        const container = image._container;
+
         const handle = document.createElement("div");
         handle.className = "resize-handle";
+        handle.style.position = "absolute";
+        handle.style.right = "-9px";
+        handle.style.bottom = "-9px";
 
         const rotateHandle = document.createElement("div");
         rotateHandle.className = "rotate-handle";
+        rotateHandle.style.position = "absolute";
+        rotateHandle.style.left = "50%";
+        rotateHandle.style.top = "-32px";
+        rotateHandle.style.transform = "translateX(-50%)";
 
         const lockHandle = document.createElement("label");
         lockHandle.className = "lock-handle";
+        lockHandle.style.position = "absolute";
+        lockHandle.style.left = "-1px";
+        lockHandle.style.top = "-32px";
 
         const lockCheckbox = document.createElement("input");
         lockCheckbox.type = "checkbox";
@@ -524,63 +548,19 @@
 
         handle.style.display = isLocked ? "none" : "block";
         rotateHandle.style.display = isLocked ? "none" : "block";
-        lockCheckbox.checked = !!isLocked;
         lockHandle.title = isLocked ? "Unlock image" : "Lock image";
 
-        canvas.appendChild(handle);
-        canvas.appendChild(rotateHandle);
-        canvas.appendChild(lockHandle);
+        // These controls are children of the image container.
+        // No screen/world coordinate conversion is needed for their placement.
+        container.appendChild(handle);
+        container.appendChild(rotateHandle);
+        container.appendChild(lockHandle);
 
         const updateHandle = () => {
             if (!image.classList.contains("selected")) {
                 removeResizeHandle(image);
                 return;
             }
-
-            const left = parseFloat(image.style.left) || 0;
-            const top = parseFloat(image.style.top) || 0;
-            const width = image.offsetWidth;
-            const height = image.offsetHeight;
-            const angle = (image._rotation || 0) * Math.PI / 180;
-
-            const centerX = left + width / 2;
-            const centerY = top + height / 2;
-
-            const rotatePoint = (x, y) => ({
-                x: centerX + x * Math.cos(angle) - y * Math.sin(angle),
-                y: centerY + x * Math.sin(angle) + y * Math.cos(angle)
-            });
-
-            const resizePoint = rotatePoint(width / 2, height / 2);
-            const rotatePointPosition = rotatePoint(0, -height / 2 - 23);
-            const lockPointPosition = rotatePoint(-width / 2, -height / 2);
-
-            const worldToScreen = (point) => ({
-                x: point.x * zoom + viewX,
-                y: point.y * zoom + viewY
-            });
-
-            const resizeScreen = worldToScreen(resizePoint);
-            const rotateScreen = worldToScreen(rotatePointPosition);
-            const lockScreen = worldToScreen(lockPointPosition);
-
-            handle.style.left =
-                (resizeScreen.x - 9) + "px";
-
-            handle.style.top =
-                (resizeScreen.y - 9) + "px";
-
-            rotateHandle.style.left =
-                (rotateScreen.x - 9) + "px";
-
-            rotateHandle.style.top =
-                (rotateScreen.y - 9) + "px";
-
-            lockHandle.style.left =
-                (lockScreen.x - lockHandle.offsetWidth - 6) + "px";
-
-            lockHandle.style.top =
-                (lockScreen.y - lockHandle.offsetHeight - 6) + "px";
 
             const currentImageState = getImageState(image);
             const currentLocked = currentImageState && currentImageState.locked;
@@ -614,7 +594,7 @@
             event.preventDefault();
             event.stopPropagation();
 
-            const rect = image.getBoundingClientRect();
+            const rect = container.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
             const startAngle = Math.atan2(
@@ -622,7 +602,7 @@
                 event.clientX - centerX
             );
 
-            const currentRotation = image._rotation || 0;
+            const currentRotation = container._rotation || 0;
 
             const rotate = moveEvent => {
                 const angle = Math.atan2(
@@ -631,10 +611,8 @@
                 );
 
                 const delta = (angle - startAngle) * 180 / Math.PI;
-                image._rotation = currentRotation + delta;
-                image.style.transform = "rotate(" + image._rotation + "deg)";
-
-                updateHandle();
+                container._rotation = currentRotation + delta;
+                container.style.transform = "rotate(" + container._rotation + "deg)";
             };
 
             const stopRotate = async () => {
@@ -651,16 +629,14 @@
             event.preventDefault();
             event.stopPropagation();
 
-            const startWidth = image.offsetWidth;
-            const startHeight = image.offsetHeight;
+            const startWidth = container.offsetWidth;
+            const startHeight = container.offsetHeight;
             const aspectRatio = startWidth / startHeight;
-            const angle = (image._rotation || 0) * Math.PI / 180;
 
-            const rect = image.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
-
+            const rect = container.getBoundingClientRect();
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
+            const angle = (container._rotation || 0) * Math.PI / 180;
 
             const cornerLength = Math.hypot(startWidth / 2, startHeight / 2);
             const cornerAngle = Math.atan2(startHeight / 2, startWidth / 2) + angle;
@@ -675,20 +651,18 @@
                     pointerX * cornerDirectionX +
                     pointerY * cornerDirectionY;
 
-                const scale = projectedLength / cornerLength;
+                const scale = projectedLength / (cornerLength * zoom);
                 const newWidth = Math.max(20, startWidth * scale);
                 const newHeight = newWidth / aspectRatio;
 
-                image.style.width = newWidth + "px";
-                image.style.height = newHeight + "px";
+                container.style.width = newWidth + "px";
+                container.style.height = newHeight + "px";
 
-                image.style.left =
+                container.style.left =
                     (screenToWorldX(centerX) - newWidth / 2) + "px";
 
-                image.style.top =
+                container.style.top =
                     (screenToWorldY(centerY) - newHeight / 2) + "px";
-
-                updateHandle();
             };
 
             const stopResize = async () => {
@@ -715,24 +689,6 @@
         }
     }
 
-    function removeResizeHandle(image) {
-        if (image._resizeHandle) {
-            image._resizeHandle.remove();
-            image._resizeHandle = null;
-        }
-
-        if (image._rotateHandle) {
-            image._rotateHandle.remove();
-            image._rotateHandle = null;
-        }
-
-        if (image._lockHandle) {
-            image._lockHandle.remove();
-            image._lockHandle = null;
-        }
-
-        image._updateResizeHandle = null;
-    }
 </script>
 
 </body>
