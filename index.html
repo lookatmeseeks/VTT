@@ -537,16 +537,14 @@
                 return;
             }
 
-            const rect = image.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
-
-            const centerX = rect.left + rect.width / 2;
-            const centerY = rect.top + rect.height / 2;
-            const worldCenterX = screenToWorldX(centerX);
-            const worldCenterY = screenToWorldY(centerY);
+            const left = parseFloat(image.style.left) || 0;
+            const top = parseFloat(image.style.top) || 0;
             const width = image.offsetWidth;
             const height = image.offsetHeight;
             const angle = (image._rotation || 0) * Math.PI / 180;
+
+            const centerX = left + width / 2;
+            const centerY = top + height / 2;
 
             const rotatePoint = (x, y) => ({
                 x: centerX + x * Math.cos(angle) - y * Math.sin(angle),
@@ -558,22 +556,22 @@
             const lockPointPosition = rotatePoint(-width / 2, -height / 2);
 
             handle.style.left =
-                (screenToWorldX(resizePoint.x) - 9) + "px";
+                (resizePoint.x - 9 / zoom) + "px";
 
             handle.style.top =
-                (screenToWorldY(resizePoint.y) - 9) + "px";
+                (resizePoint.y - 9 / zoom) + "px";
 
             rotateHandle.style.left =
-                (screenToWorldX(rotatePointPosition.x) - 9) + "px";
+                (rotatePointPosition.x - 9 / zoom) + "px";
 
             rotateHandle.style.top =
-                (screenToWorldY(rotatePointPosition.y) - 9) + "px";
+                (rotatePointPosition.y - 9 / zoom) + "px";
 
             lockHandle.style.left =
-                (screenToWorldX(lockPointPosition.x) - lockHandle.offsetWidth / zoom - 6) + "px";
+                (lockPointPosition.x - lockHandle.offsetWidth / zoom - 6 / zoom) + "px";
 
             lockHandle.style.top =
-                (screenToWorldY(lockPointPosition.y) - lockHandle.offsetHeight / zoom - 6) + "px";
+                (lockPointPosition.y - lockHandle.offsetHeight / zoom - 6 / zoom) + "px";
 
             const currentImageState = getImageState(image);
             const currentLocked = currentImageState && currentImageState.locked;
