@@ -41,6 +41,17 @@
             outline: 3px solid red !important;
             outline-offset: 2px;
         }
+
+        .resize-handle {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border: 2px solid white;
+            background: red;
+            box-sizing: border-box;
+            cursor: nwse-resize;
+            z-index: 1000;
+        }
     </style>
 </head>
 
@@ -82,6 +93,7 @@
     canvas.addEventListener("mousedown", event => {
         if (event.target === canvas) {
             document.querySelectorAll(".image.selected").forEach(image => {
+                removeResizeHandle(image);
                 image.classList.remove("selected");
             });
         }
@@ -94,10 +106,12 @@
 
         image.addEventListener("mousedown", event => {
             document.querySelectorAll(".image.selected").forEach(other => {
+                removeResizeHandle(other);
                 other.classList.remove("selected");
             });
 
             image.classList.add("selected");
+            addResizeHandle(image);
 
             dragging = true;
 
@@ -124,6 +138,77 @@
         document.addEventListener("mouseup", () => {
             dragging = false;
         });
+    }
+
+    function addResizeHandle(image) {
+        removeResizeHandle(image);
+
+        const handle = document.createElement("div");
+        handle.className = "resize-handle";
+
+        document.body.appendChild(handle);
+
+        const updateHandle = () => {
+            if (!image.classList.contains("selected")) {
+                removeResizeHandle(image);
+                return;
+            }
+
+            const rect = image.getBoundingClientRect();
+
+            handle.style.left = (rect.right - 6) + "px";
+            handle.style.top = (rect.bottom - 6) + "px";
+        };
+
+        handle.addEventListener("mousedown", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const startX = event.clientX;
+            const startWidth = image.offsetWidth;
+            const startHeight = image.offsetHeight;
+            const aspectRatio = startWidth / startHeight;
+
+            const resize = moveEvent => {
+                const newWidth = Math.max(
+                    20,
+                    startWidth + (moveEvent.clientX - startX)
+                );
+
+                image.style.width = newWidth + "px";
+                image.style.height = (newWidth / aspectRatio) + "px";
+
+                updateHandle();
+            };
+
+            const stopResize = () => {
+                document.removeEventListener("mousemove", resize);
+                document.removeEventListener("mouseup", stopResize);
+            };
+
+            document.addEventListener("mousemove", resize);
+            document.addEventListener("mouseup", stopResize);
+        });
+
+        const observer = new ResizeObserver(updateHandle);
+        observer.observe(image);
+
+        image._resizeHandle = handle;
+        image._resizeObserver = observer;
+
+        updateHandle();
+    }
+
+    function removeResizeHandle(image) {
+        if (image._resizeHandle) {
+            image._resizeHandle.remove();
+            image._resizeHandle = null;
+        }
+
+        if (image._resizeObserver) {
+            image._resizeObserver.disconnect();
+            image._resizeObserver = null;
+        }
     }
 </script>
 
