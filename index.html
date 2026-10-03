@@ -180,20 +180,33 @@
             }
 
             const rect = image.getBoundingClientRect();
-
             const canvasRect = canvas.getBoundingClientRect();
 
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            const width = image.offsetWidth;
+            const height = image.offsetHeight;
+            const angle = (image._rotation || 0) * Math.PI / 180;
+
+            const rotatePoint = (x, y) => ({
+                x: centerX + x * Math.cos(angle) - y * Math.sin(angle),
+                y: centerY + x * Math.sin(angle) + y * Math.cos(angle)
+            });
+
+            const resizePoint = rotatePoint(width / 2, height / 2);
+            const rotatePointPosition = rotatePoint(0, -height / 2 - 23);
+
             handle.style.left =
-                (rect.right - canvasRect.left - 9) + "px";
+                (resizePoint.x - canvasRect.left - 9) + "px";
 
             handle.style.top =
-                (rect.bottom - canvasRect.top - 9) + "px";
+                (resizePoint.y - canvasRect.top - 9) + "px";
 
             rotateHandle.style.left =
-                (rect.left - canvasRect.left + rect.width / 2 - 9) + "px";
+                (rotatePointPosition.x - canvasRect.left - 9) + "px";
 
             rotateHandle.style.top =
-                (rect.top - canvasRect.top - 32) + "px";
+                (rotatePointPosition.y - canvasRect.top - 9) + "px";
         };
 
         rotateHandle.addEventListener("mousedown", event => {
