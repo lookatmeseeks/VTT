@@ -19,16 +19,94 @@
         }
 
         #canvas {
+            position: relative;
             width: 100vw;
             height: 100vh;
             background: #333;
+            overflow: hidden;
+        }
+
+        .image {
+            position: absolute;
+            max-width: none;
+            cursor: grab;
+            user-select: none;
+        }
+
+        .image:active {
+            cursor: grabbing;
         }
     </style>
 </head>
 
 <body>
 
-    <div id="canvas"></div>
+<div id="canvas"></div>
+
+<script>
+    const canvas = document.getElementById("canvas");
+
+    canvas.addEventListener("dragover", event => {
+        event.preventDefault();
+    });
+
+    canvas.addEventListener("drop", event => {
+        event.preventDefault();
+
+        const files = event.dataTransfer.files;
+
+        for (const file of files) {
+            if (!file.type.startsWith("image/")) {
+                continue;
+            }
+
+            const image = document.createElement("img");
+
+            image.className = "image";
+            image.src = URL.createObjectURL(file);
+
+            image.style.left = event.clientX + "px";
+            image.style.top = event.clientY + "px";
+
+            canvas.appendChild(image);
+
+            makeDraggable(image);
+        }
+    });
+
+    function makeDraggable(image) {
+        let dragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        image.addEventListener("mousedown", event => {
+            dragging = true;
+
+            const rect = image.getBoundingClientRect();
+
+            offsetX = event.clientX - rect.left;
+            offsetY = event.clientY - rect.top;
+
+            event.preventDefault();
+        });
+
+        document.addEventListener("mousemove", event => {
+            if (!dragging) {
+                return;
+            }
+
+            image.style.left =
+                (event.clientX - offsetX) + "px";
+
+            image.style.top =
+                (event.clientY - offsetY) + "px";
+        });
+
+        document.addEventListener("mouseup", () => {
+            dragging = false;
+        });
+    }
+</script>
 
 </body>
 </html>
