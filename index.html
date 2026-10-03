@@ -527,9 +527,9 @@
         lockCheckbox.checked = !!isLocked;
         lockHandle.title = isLocked ? "Unlock image" : "Lock image";
 
-        world.appendChild(handle);
-        world.appendChild(rotateHandle);
-        world.appendChild(lockHandle);
+        canvas.appendChild(handle);
+        canvas.appendChild(rotateHandle);
+        canvas.appendChild(lockHandle);
 
         const updateHandle = () => {
             if (!image.classList.contains("selected")) {
@@ -555,23 +555,32 @@
             const rotatePointPosition = rotatePoint(0, -height / 2 - 23);
             const lockPointPosition = rotatePoint(-width / 2, -height / 2);
 
+            const worldToScreen = (point) => ({
+                x: point.x * zoom + viewX,
+                y: point.y * zoom + viewY
+            });
+
+            const resizeScreen = worldToScreen(resizePoint);
+            const rotateScreen = worldToScreen(rotatePointPosition);
+            const lockScreen = worldToScreen(lockPointPosition);
+
             handle.style.left =
-                (resizePoint.x - 9 / zoom) + "px";
+                (resizeScreen.x - 9) + "px";
 
             handle.style.top =
-                (resizePoint.y - 9 / zoom) + "px";
+                (resizeScreen.y - 9) + "px";
 
             rotateHandle.style.left =
-                (rotatePointPosition.x - 9 / zoom) + "px";
+                (rotateScreen.x - 9) + "px";
 
             rotateHandle.style.top =
-                (rotatePointPosition.y - 9 / zoom) + "px";
+                (rotateScreen.y - 9) + "px";
 
             lockHandle.style.left =
-                (lockPointPosition.x - lockHandle.offsetWidth / zoom - 6 / zoom) + "px";
+                (lockScreen.x - lockHandle.offsetWidth - 6) + "px";
 
             lockHandle.style.top =
-                (lockPointPosition.y - lockHandle.offsetHeight / zoom - 6 / zoom) + "px";
+                (lockScreen.y - lockHandle.offsetHeight - 6) + "px";
 
             const currentImageState = getImageState(image);
             const currentLocked = currentImageState && currentImageState.locked;
