@@ -69,6 +69,7 @@
             cursor: grabbing;
         }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 
 <body>
@@ -77,6 +78,10 @@
 
 <script>
     const canvas = document.getElementById("canvas");
+
+    const SUPABASE_URL = "https://wpkbykftykssrlevutsm.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_bbq3qtA1tjGvoRXpsOO0OQ_ujSswI91";
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     canvas.addEventListener("dragover", event => {
         event.preventDefault();
