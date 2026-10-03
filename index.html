@@ -510,19 +510,26 @@
 
                 // Sample the actual source pixel rather than drawing the
                 // whole image into the sample canvas.
-                context.drawImage(
-                    image,
-                    sourceX,
-                    sourceY,
-                    1,
-                    1,
-                    0,
-                    0,
-                    1,
-                    1
-                );
+                try {
+                    context.drawImage(
+                        image,
+                        sourceX,
+                        sourceY,
+                        1,
+                        1,
+                        0,
+                        0,
+                        1,
+                        1
+                    );
 
-                opaque = context.getImageData(0, 0, 1, 1).data[3] > 0;
+                    opaque = context.getImageData(0, 0, 1, 1).data[3] > 0;
+                } catch (error) {
+                    // Cross-origin storage images may taint the sampling canvas.
+                    // If that happens, keep normal image selection working.
+                    console.warn("Could not sample image transparency:", error);
+                    opaque = true;
+                }
             }
 
             if (!opaque) {
