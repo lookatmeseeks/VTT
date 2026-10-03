@@ -569,7 +569,8 @@
             rotateHandle.style.top = (-32 / zoom) + "px";
             rotateHandle.style.transform = "translateX(-50%)";
 
-            lockHandle.style.right = (6 / zoom) + "px";
+            lockHandle.style.right = "auto";
+            lockHandle.style.left = (-6 / zoom) + "px";
             lockHandle.style.top = (-32 / zoom) + "px";
 
             const currentImageState = getImageState(image);
@@ -647,25 +648,31 @@
             const angle = (image._rotation || 0) * Math.PI / 180;
 
             const rect = image.getBoundingClientRect();
-            const canvasRect = canvas.getBoundingClientRect();
-
             const centerX = rect.left + rect.width / 2;
             const centerY = rect.top + rect.height / 2;
 
-            const cornerLength = Math.hypot(startWidth / 2, startHeight / 2);
-            const cornerAngle = Math.atan2(startHeight / 2, startWidth / 2) + angle;
+            const cornerAngle =
+                Math.atan2(startHeight / 2, startWidth / 2) + angle;
             const cornerDirectionX = Math.cos(cornerAngle);
             const cornerDirectionY = Math.sin(cornerAngle);
 
+            // Use the actual mouse position as the resize starting point so
+            // grabbing the handle does not make the image jump.
+            const startPointerX = (event.clientX - centerX) / zoom;
+            const startPointerY = (event.clientY - centerY) / zoom;
+            const startProjectedLength =
+                startPointerX * cornerDirectionX +
+                startPointerY * cornerDirectionY;
+
             const resize = moveEvent => {
-                const pointerX = moveEvent.clientX - centerX;
-                const pointerY = moveEvent.clientY - centerY;
+                const pointerX = (moveEvent.clientX - centerX) / zoom;
+                const pointerY = (moveEvent.clientY - centerY) / zoom;
 
                 const projectedLength =
                     pointerX * cornerDirectionX +
                     pointerY * cornerDirectionY;
 
-                const scale = projectedLength / cornerLength;
+                const scale = projectedLength / startProjectedLength;
                 const newWidth = Math.max(20, startWidth * scale);
                 const newHeight = newWidth / aspectRatio;
 
