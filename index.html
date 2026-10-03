@@ -80,16 +80,23 @@
 
         .lock-handle {
             position: absolute;
-            width: 24px;
-            height: 24px;
-            padding: 0;
-            border: 2px solid black;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 5px 2px 2px;
+            border: 1px solid black;
             background: white;
             box-sizing: border-box;
             cursor: pointer;
             z-index: 99999;
+            color: black;
             font-size: 14px;
-            line-height: 20px;
+            line-height: 18px;
+        }
+
+        .lock-handle input {
+            margin: 0;
+            cursor: pointer;
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -424,17 +431,25 @@
         const rotateHandle = document.createElement("div");
         rotateHandle.className = "rotate-handle";
 
-        const lockHandle = document.createElement("input");
+        const lockHandle = document.createElement("label");
         lockHandle.className = "lock-handle";
-        lockHandle.type = "checkbox";
+
+        const lockCheckbox = document.createElement("input");
+        lockCheckbox.type = "checkbox";
+
+        const lockText = document.createElement("span");
+        lockText.textContent = "Lock";
+
+        lockHandle.appendChild(lockCheckbox);
+        lockHandle.appendChild(lockText);
 
         const imageState = getImageState(image);
         const isLocked = imageState && imageState.locked;
-        lockHandle.checked = !!isLocked;
+        lockCheckbox.checked = !!isLocked;
 
         handle.style.display = isLocked ? "none" : "block";
         rotateHandle.style.display = isLocked ? "none" : "block";
-        lockHandle.checked = isLocked;
+        lockCheckbox.checked = !!isLocked;
         lockHandle.title = isLocked ? "Unlock image" : "Lock image";
 
         canvas.appendChild(handle);
@@ -478,17 +493,17 @@
                 (rotatePointPosition.y - canvasRect.top - 9) + "px";
 
             lockHandle.style.left =
-                (lockPointPosition.x - canvasRect.left) + "px";
+                (lockPointPosition.x - canvasRect.left - lockHandle.offsetWidth - 6) + "px";
 
             lockHandle.style.top =
-                (lockPointPosition.y - canvasRect.top) + "px";
+                (lockPointPosition.y - canvasRect.top - lockHandle.offsetHeight - 6) + "px";
 
             const currentImageState = getImageState(image);
             const currentLocked = currentImageState && currentImageState.locked;
 
             handle.style.display = currentLocked ? "none" : "block";
             rotateHandle.style.display = currentLocked ? "none" : "block";
-            lockHandle.checked = !!currentLocked;
+            lockCheckbox.checked = !!currentLocked;
             lockHandle.title = currentLocked ? "Unlock image" : "Lock image";
         };
 
@@ -497,7 +512,7 @@
             event.stopPropagation();
         });
 
-        lockHandle.addEventListener("change", async event => {
+        lockCheckbox.addEventListener("change", async event => {
             event.stopPropagation();
 
             const currentImageState = getImageState(image);
@@ -506,7 +521,7 @@
                 return;
             }
 
-            currentImageState.locked = lockHandle.checked;
+            currentImageState.locked = lockCheckbox.checked;
             updateHandle();
             await saveRoom();
         });
