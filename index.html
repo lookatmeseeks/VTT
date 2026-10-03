@@ -61,6 +61,16 @@
             cursor: pointer;
         }
 
+        .controls-container {
+            position: absolute;
+            pointer-events: none;
+            transform-origin: center center;
+        }
+
+        .controls-container > * {
+            pointer-events: auto;
+        }
+
         .resize-handle {
             position: absolute;
             width: 18px;
@@ -527,9 +537,12 @@
         lockCheckbox.checked = !!isLocked;
         lockHandle.title = isLocked ? "Unlock image" : "Lock image";
 
-        world.appendChild(handle);
-        world.appendChild(rotateHandle);
-        world.appendChild(lockHandle);
+        const controls = document.createElement("div");
+        controls.className = "controls-container";
+        controls.appendChild(handle);
+        controls.appendChild(rotateHandle);
+        controls.appendChild(lockHandle);
+        world.appendChild(controls);
 
         const updateHandle = () => {
             if (!image.classList.contains("selected")) {
@@ -541,37 +554,23 @@
             const top = parseFloat(image.style.top) || 0;
             const width = image.offsetWidth;
             const height = image.offsetHeight;
-            const angle = (image._rotation || 0) * Math.PI / 180;
+            const angle = image._rotation || 0;
 
-            const centerX = left + width / 2;
-            const centerY = top + height / 2;
+            controls.style.left = left + "px";
+            controls.style.top = top + "px";
+            controls.style.width = width + "px";
+            controls.style.height = height + "px";
+            controls.style.transform = "rotate(" + angle + "deg)";
 
-            const rotatePoint = (x, y) => ({
-                x: centerX + x * Math.cos(angle) - y * Math.sin(angle),
-                y: centerY + x * Math.sin(angle) + y * Math.cos(angle)
-            });
+            handle.style.right = (-9 / zoom) + "px";
+            handle.style.bottom = (-9 / zoom) + "px";
 
-            const resizePoint = rotatePoint(width / 2, height / 2);
-            const rotatePointPosition = rotatePoint(0, -height / 2 - 23);
-            const lockPointPosition = rotatePoint(-width / 2, -height / 2);
+            rotateHandle.style.left = "50%";
+            rotateHandle.style.top = (-32 / zoom) + "px";
+            rotateHandle.style.transform = "translateX(-50%)";
 
-            handle.style.left =
-                (resizePoint.x - 9 / zoom) + "px";
-
-            handle.style.top =
-                (resizePoint.y - 9 / zoom) + "px";
-
-            rotateHandle.style.left =
-                (rotatePointPosition.x - 9 / zoom) + "px";
-
-            rotateHandle.style.top =
-                (rotatePointPosition.y - 9 / zoom) + "px";
-
-            lockHandle.style.left =
-                (lockPointPosition.x - lockHandle.offsetWidth / zoom - 6 / zoom) + "px";
-
-            lockHandle.style.top =
-                (lockPointPosition.y - lockHandle.offsetHeight / zoom - 6 / zoom) + "px";
+            lockHandle.style.right = (6 / zoom) + "px";
+            lockHandle.style.top = (-32 / zoom) + "px";
 
             const currentImageState = getImageState(image);
             const currentLocked = currentImageState && currentImageState.locked;
@@ -695,6 +694,7 @@
         image._resizeHandle = handle;
         image._rotateHandle = rotateHandle;
         image._lockHandle = lockHandle;
+        image._controlsContainer = controls;
         image._updateResizeHandle = updateHandle;
 
         updateHandle();
@@ -718,8 +718,12 @@
         }
 
         if (image._lockHandle) {
-            image._lockHandle.remove();
             image._lockHandle = null;
+        }
+
+        if (image._controlsContainer) {
+            image._controlsContainer.remove();
+            image._controlsContainer = null;
         }
 
         image._updateResizeHandle = null;
