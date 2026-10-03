@@ -424,16 +424,17 @@
         const rotateHandle = document.createElement("div");
         rotateHandle.className = "rotate-handle";
 
-        const lockHandle = document.createElement("button");
+        const lockHandle = document.createElement("input");
         lockHandle.className = "lock-handle";
-        lockHandle.type = "button";
+        lockHandle.type = "checkbox";
+        lockHandle.checked = isLocked;
 
         const imageState = getImageState(image);
         const isLocked = imageState && imageState.locked;
 
         handle.style.display = isLocked ? "none" : "block";
         rotateHandle.style.display = isLocked ? "none" : "block";
-        lockHandle.innerHTML = "";
+        lockHandle.checked = isLocked;
         lockHandle.title = isLocked ? "Unlock image" : "Lock image";
 
         canvas.appendChild(handle);
@@ -487,7 +488,7 @@
 
             handle.style.display = currentLocked ? "none" : "block";
             rotateHandle.style.display = currentLocked ? "none" : "block";
-            lockHandle.innerHTML = "";
+            lockHandle.checked = !!currentLocked;
             lockHandle.title = currentLocked ? "Unlock image" : "Lock image";
         };
 
@@ -496,8 +497,7 @@
             event.stopPropagation();
         });
 
-        lockHandle.addEventListener("click", async event => {
-            event.preventDefault();
+        lockHandle.addEventListener("change", async event => {
             event.stopPropagation();
 
             const currentImageState = getImageState(image);
@@ -506,7 +506,7 @@
                 return;
             }
 
-            currentImageState.locked = !currentImageState.locked;
+            currentImageState.locked = lockHandle.checked;
             updateHandle();
             await saveRoom();
         });
