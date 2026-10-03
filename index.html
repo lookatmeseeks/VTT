@@ -148,7 +148,7 @@
         const handle = document.createElement("div");
         handle.className = "resize-handle";
 
-        document.body.appendChild(handle);
+        canvas.appendChild(handle);
 
         const updateHandle = () => {
             if (!image.classList.contains("selected")) {
@@ -158,8 +158,13 @@
 
             const rect = image.getBoundingClientRect();
 
-            handle.style.left = (rect.right - 9) + "px";
-            handle.style.top = (rect.bottom - 9) + "px";
+            const canvasRect = canvas.getBoundingClientRect();
+
+            handle.style.left =
+                (rect.right - canvasRect.left - 9) + "px";
+
+            handle.style.top =
+                (rect.bottom - canvasRect.top - 9) + "px";
         };
 
         handle.addEventListener("mousedown", event => {
