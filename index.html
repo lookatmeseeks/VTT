@@ -90,41 +90,7 @@
         images: []
     };
 
-    async function initializeRoom() {
-        const { data, error } = await supabaseClient
-            .from("rooms")
-            .select("state")
-            .eq("id", roomId)
-            .maybeSingle();
-
-        if (error) {
-            console.error("Failed to load room:", error);
-            return;
-        }
-
-        if (data) {
-            roomState = data.state;
-            console.log("Loaded room:", roomId, roomState);
-            return;
-        }
-
-        const { data: created, error: createError } = await supabaseClient
-            .from("rooms")
-            .insert({
-                id: roomId,
-                state: roomState
-            })
-            .select("state")
-            .single();
-
-        if (createError) {
-            console.error("Failed to create room:", createError);
-            return;
-        }
-
-        roomState = created.state;
-        console.log("Created room:", roomId, roomState);
-    }
+    const roomChannel = supabaseClient.channel("room:" + roomId);
 
     async function saveRoom() {
         const { error } = await supabaseClient
@@ -137,6 +103,30 @@
 
         if (error) {
             console.error("Failed to save room:", error);
+            return;
+        }
+
+        const { error: broadcastError } = await roomChannel.send({
+            type: "broadcast",
+            event: "state",
+            payload: {
+                state: roomState
+            }
+        });
+
+        if (broadcastError) {
+            console.error("Failed to broadcast room:", broadcastError);
+        }
+    }
+
+    function renderRoomState() {
+        document.querySelectorAll(".image").forEach(image => {
+            removeResizeHandle(image);
+            image.remove();
+        });
+
+        for (const imageState of roomState.images || []) {
+            createImageFromState(imageState);
         }
     }
 
@@ -145,6 +135,7 @@
 
         image.className = "image";
         image.src = imageState.url;
+        image._stateId = imageState.id || imageState.url;
 
         image.style.left = imageState.left + "px";
         image.style.top = imageState.top + "px";
@@ -181,11 +172,7 @@
         if (data) {
             roomState = data.state;
             console.log("Loaded room:", roomId, roomState);
-
-            for (const imageState of roomState.images || []) {
-                createImageFromState(imageState);
-            }
-
+            renderRoomState();
             return;
         }
 
@@ -206,6 +193,23 @@
         roomState = created.state;
         console.log("Created room:", roomId, roomState);
     }
+
+    roomChannel
+        .on(
+            "broadcast",
+            { event: "state" },
+            payload => {
+                if (!payload.payload || !payload.payload.state) {
+                    return;
+                }
+
+                roomState = payload.payload.state;
+                renderRoomState();
+            }
+        )
+        .subscribe(status => {
+            console.log("Room sync:", status);
+        });
 
     initializeRoom();
 
@@ -243,6 +247,7 @@
             console.log("Generated image URL:", publicUrlData.publicUrl);
 
             const imageState = {
+                id: crypto.randomUUID(),
                 url: publicUrlData.publicUrl,
                 left: event.clientX,
                 top: event.clientY,
@@ -278,6 +283,28 @@
         }
     });
 
+    function getImageState(image) {
+        return roomState.images.find(state =>
+            (state.id || state.url) === image._stateId
+        );
+    }
+
+    async function saveImagePosition(image) {
+        const imageState = getImageState(image);
+
+        if (!imageState) {
+            return;
+        }
+
+        imageState.left = parseFloat(image.style.left) || 0;
+        imageState.top = parseFloat(image.style.top) || 0;
+        imageState.width = image.offsetWidth;
+        imageState.height = image.offsetHeight;
+        imageState.rotation = image._rotation || 0;
+
+        await saveRoom();
+    }
+
     function makeDraggable(image) {
         let dragging = false;
         let offsetX = 0;
@@ -285,8 +312,10 @@
 
         image.addEventListener("mousedown", event => {
             document.querySelectorAll(".image.selected").forEach(other => {
-                removeResizeHandle(other);
-                other.classList.remove("selected");
+                if (other !== image) {
+                    removeResizeHandle(other);
+                    other.classList.remove("selected");
+                }
             });
 
             image.classList.add("selected");
@@ -316,8 +345,13 @@
             updateResizeHandle(image);
         });
 
-        document.addEventListener("mouseup", () => {
+        document.addEventListener("mouseup", async () => {
+            if (!dragging) {
+                return;
+            }
+
             dragging = false;
+            await saveImagePosition(image);
         });
     }
 
@@ -399,9 +433,10 @@
                 updateHandle();
             };
 
-            const stopRotate = () => {
+            const stopRotate = async () => {
                 document.removeEventListener("mousemove", rotate);
                 document.removeEventListener("mouseup", stopRotate);
+                await saveImagePosition(image);
             };
 
             document.addEventListener("mousemove", rotate);
@@ -452,9 +487,10 @@
                 updateHandle();
             };
 
-            const stopResize = () => {
+            const stopResize = async () => {
                 document.removeEventListener("mousemove", resize);
                 document.removeEventListener("mouseup", stopResize);
+                await saveImagePosition(image);
             };
 
             document.addEventListener("mousemove", resize);
