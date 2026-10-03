@@ -249,19 +249,42 @@
             event.preventDefault();
             event.stopPropagation();
 
-            const startX = event.clientX;
             const startWidth = image.offsetWidth;
             const startHeight = image.offsetHeight;
             const aspectRatio = startWidth / startHeight;
+            const angle = (image._rotation || 0) * Math.PI / 180;
+
+            const rect = image.getBoundingClientRect();
+            const canvasRect = canvas.getBoundingClientRect();
+
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            const cornerLength = Math.hypot(startWidth / 2, startHeight / 2);
+            const cornerAngle = Math.atan2(startHeight / 2, startWidth / 2) + angle;
+            const cornerDirectionX = Math.cos(cornerAngle);
+            const cornerDirectionY = Math.sin(cornerAngle);
 
             const resize = moveEvent => {
-                const newWidth = Math.max(
-                    20,
-                    startWidth + (moveEvent.clientX - startX)
-                );
+                const pointerX = moveEvent.clientX - centerX;
+                const pointerY = moveEvent.clientY - centerY;
+
+                const projectedLength =
+                    pointerX * cornerDirectionX +
+                    pointerY * cornerDirectionY;
+
+                const scale = projectedLength / cornerLength;
+                const newWidth = Math.max(20, startWidth * scale);
+                const newHeight = newWidth / aspectRatio;
 
                 image.style.width = newWidth + "px";
-                image.style.height = (newWidth / aspectRatio) + "px";
+                image.style.height = newHeight + "px";
+
+                image.style.left =
+                    (centerX - canvasRect.left - newWidth / 2) + "px";
+
+                image.style.top =
+                    (centerY - canvasRect.top - newHeight / 2) + "px";
 
                 updateHandle();
             };
