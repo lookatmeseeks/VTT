@@ -77,6 +77,20 @@
         .rotate-handle:active {
             cursor: grabbing;
         }
+
+        .lock-handle {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            border: 2px solid black;
+            background: white;
+            box-sizing: border-box;
+            cursor: pointer;
+            z-index: 99999;
+            font-size: 14px;
+            line-height: 20px;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -290,7 +304,8 @@
                 top: event.clientY,
                 width: 0,
                 height: 0,
-                rotation: 0
+                rotation: 0,
+                locked: false
             };
 
             const image = createImageFromState(imageState);
@@ -358,6 +373,14 @@
             image.classList.add("selected");
             addResizeHandle(image);
 
+            const imageState = getImageState(image);
+
+            if (imageState && imageState.locked) {
+                dragging = false;
+                event.preventDefault();
+                return;
+            }
+
             dragging = true;
 
             const rect = image.getBoundingClientRect();
@@ -401,11 +424,21 @@
         const rotateHandle = document.createElement("div");
         rotateHandle.className = "rotate-handle";
 
-        handle.style.display = "block";
-        rotateHandle.style.display = "block";
+        const lockHandle = document.createElement("button");
+        lockHandle.className = "lock-handle";
+        lockHandle.type = "button";
+
+        const imageState = getImageState(image);
+        const isLocked = imageState && imageState.locked;
+
+        handle.style.display = isLocked ? "none" : "block";
+        rotateHandle.style.display = isLocked ? "none" : "block";
+        lockHandle.textContent = isLocked ? "🔒" : "🔓";
+        lockHandle.title = isLocked ? "Unlock image" : "Lock image";
 
         canvas.appendChild(handle);
         canvas.appendChild(rotateHandle);
+        canvas.appendChild(lockHandle);
 
         const updateHandle = () => {
             if (!image.classList.contains("selected")) {
@@ -441,7 +474,41 @@
 
             rotateHandle.style.top =
                 (rotatePointPosition.y - canvasRect.top - 9) + "px";
+
+            lockHandle.style.left =
+                (rotatePointPosition.x - canvasRect.left - 12) + "px";
+
+            lockHandle.style.top =
+                (rotatePointPosition.y - canvasRect.top - 12) + "px";
+
+            const currentImageState = getImageState(image);
+            const currentLocked = currentImageState && currentImageState.locked;
+
+            handle.style.display = currentLocked ? "none" : "block";
+            rotateHandle.style.display = currentLocked ? "none" : "block";
+            lockHandle.textContent = currentLocked ? "🔒" : "🔓";
+            lockHandle.title = currentLocked ? "Unlock image" : "Lock image";
         };
+
+        lockHandle.addEventListener("mousedown", event => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+
+        lockHandle.addEventListener("click", async event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const currentImageState = getImageState(image);
+
+            if (!currentImageState) {
+                return;
+            }
+
+            currentImageState.locked = !currentImageState.locked;
+            updateHandle();
+            await saveRoom();
+        });
 
         rotateHandle.addEventListener("mousedown", event => {
             event.preventDefault();
@@ -556,6 +623,11 @@
         if (image._rotateHandle) {
             image._rotateHandle.remove();
             image._rotateHandle = null;
+        }
+
+        if (image._lockHandle) {
+            image._lockHandle.remove();
+            image._lockHandle = null;
         }
 
         image._updateResizeHandle = null;
