@@ -427,10 +427,10 @@
         const lockHandle = document.createElement("input");
         lockHandle.className = "lock-handle";
         lockHandle.type = "checkbox";
-        lockHandle.checked = isLocked;
 
         const imageState = getImageState(image);
         const isLocked = imageState && imageState.locked;
+        lockHandle.checked = !!isLocked;
 
         handle.style.display = isLocked ? "none" : "block";
         rotateHandle.style.display = isLocked ? "none" : "block";
