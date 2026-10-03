@@ -36,6 +36,10 @@
         .image:active {
             cursor: grabbing;
         }
+
+        .image.selected {
+            outline: 2px solid white;
+        }
     </style>
 </head>
 
@@ -74,12 +78,26 @@
         }
     });
 
+    canvas.addEventListener("mousedown", event => {
+        if (event.target === canvas) {
+            document.querySelectorAll(".image.selected").forEach(image => {
+                image.classList.remove("selected");
+            });
+        }
+    });
+
     function makeDraggable(image) {
         let dragging = false;
         let offsetX = 0;
         let offsetY = 0;
 
         image.addEventListener("mousedown", event => {
+            document.querySelectorAll(".image.selected").forEach(other => {
+                other.classList.remove("selected");
+            });
+
+            image.classList.add("selected");
+
             dragging = true;
 
             const rect = image.getBoundingClientRect();
