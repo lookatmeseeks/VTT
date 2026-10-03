@@ -159,10 +159,20 @@
                 .from("images")
                 .getPublicUrl(fileName);
 
+            console.log("Generated image URL:", publicUrlData.publicUrl);
+
             const image = document.createElement("img");
 
             image.className = "image";
             image.src = publicUrlData.publicUrl;
+
+            image.onload = () => {
+                console.log("Image loaded:", publicUrlData.publicUrl);
+            };
+
+            image.onerror = () => {
+                console.error("Image failed to load:", publicUrlData.publicUrl);
+            };
 
             image.style.left = event.clientX + "px";
             image.style.top = event.clientY + "px";
