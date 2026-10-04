@@ -71,6 +71,39 @@
             pointer-events: auto;
         }
 
+        .notes-container {
+            position: absolute;
+            pointer-events: auto;
+            transform-origin: left center;
+            z-index: 99998;
+        }
+
+        .notes-button {
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+
+        .notes-textbox {
+            display: none;
+            box-sizing: border-box;
+            margin-top: 4px;
+            width: 50%;
+            height: 50%;
+            min-width: 120px;
+            min-height: 80px;
+            resize: both;
+            background: transparent;
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            outline: none;
+            padding: 6px;
+            font: inherit;
+        }
+
+        .notes-container.visible .notes-textbox {
+            display: block;
+        }
+
         .resize-handle {
             position: absolute;
             width: 18px;
@@ -240,6 +273,7 @@
     function renderRoomState() {
         document.querySelectorAll(".image").forEach(image => {
             removeResizeHandle(image);
+            removeNotes(image);
             image.remove();
         });
 
@@ -271,6 +305,7 @@
 
         world.appendChild(image);
         makeDraggable(image);
+        addNotes(image);
 
         return image;
     }
@@ -397,7 +432,9 @@
                 width: 0,
                 height: 0,
                 rotation: 0,
-                locked: false
+                locked: false,
+                notes: "",
+                notesVisible: false
             };
 
             const image = createImageFromState(imageState);
@@ -509,6 +546,7 @@
                 screenToWorldY(event.clientY) - offsetY + "px";
 
             updateResizeHandle(image);
+            updateNotes(image);
         });
 
         document.addEventListener("mouseup", async () => {
@@ -519,6 +557,103 @@
             dragging = false;
             await saveImagePosition(image);
         });
+    }
+
+    function addNotes(image) {
+        removeNotes(image);
+
+        const imageState = getImageState(image);
+        const notesContainer = document.createElement("div");
+        notesContainer.className = "notes-container";
+
+        const notesButton = document.createElement("button");
+        notesButton.className = "notes-button";
+        notesButton.type = "button";
+        notesButton.textContent = "Notes";
+
+        const notesTextbox = document.createElement("textarea");
+        notesTextbox.className = "notes-textbox";
+        notesTextbox.placeholder = "Notes...";
+        notesTextbox.value = imageState && imageState.notes ? imageState.notes : "";
+
+        notesContainer.appendChild(notesButton);
+        notesContainer.appendChild(notesTextbox);
+        world.appendChild(notesContainer);
+
+        const update = () => {
+            if (!image.isConnected || !notesContainer.isConnected) {
+                return;
+            }
+
+            const left = parseFloat(image.style.left) || 0;
+            const top = parseFloat(image.style.top) || 0;
+            const width = parseFloat(image.style.width) || image.offsetWidth;
+            const height = parseFloat(image.style.height) || image.offsetHeight;
+            const angle = image._rotation || 0;
+
+            notesContainer.style.left = (left + width + 12) + "px";
+            notesContainer.style.top = top + "px";
+            notesContainer.style.width = Math.max(120, width * 0.5) + "px";
+            notesContainer.style.height = Math.max(80, height * 0.5) + "px";
+            notesContainer.style.transform = "rotate(" + angle + "deg)";
+        };
+
+        notesButton.addEventListener("mousedown", event => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+
+        notesButton.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            notesContainer.classList.toggle("visible");
+
+            const currentImageState = getImageState(image);
+            if (currentImageState) {
+                currentImageState.notesVisible = notesContainer.classList.contains("visible");
+                saveRoom();
+            }
+
+            update();
+        });
+
+        notesTextbox.addEventListener("mousedown", event => {
+            event.stopPropagation();
+        });
+
+        notesTextbox.addEventListener("input", () => {
+            const currentImageState = getImageState(image);
+            if (!currentImageState) {
+                return;
+            }
+
+            currentImageState.notes = notesTextbox.value;
+            saveRoom();
+        });
+
+        const visible = !!(imageState && imageState.notesVisible);
+        notesContainer.classList.toggle("visible", visible);
+
+        image._notesContainer = notesContainer;
+        image._updateNotes = update;
+
+        update();
+    }
+
+    function updateNotes(image) {
+        if (image._updateNotes) {
+            image._updateNotes();
+        }
+    }
+
+    function removeNotes(image) {
+        if (image._notesContainer) {
+            image._notesContainer.remove();
+            image._notesContainer = null;
+        }
+
+        image._updateNotes = null;
     }
 
     function addResizeHandle(image) {
@@ -594,6 +729,7 @@
             rotateHandle.style.display = currentLocked ? "none" : "block";
             lockCheckbox.checked = !!currentLocked;
             lockHandle.title = currentLocked ? "Unlock image" : "Lock image";
+            updateNotes(image);
         };
 
         lockHandle.addEventListener("mousedown", event => {
