@@ -192,10 +192,28 @@
             line-height: 18px;
         }
 
+        #parent-button {
+            position: absolute;
+            top: 10px;
+            left: 245px;
+            z-index: 100000;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        #unlink-button {
+            position: absolute;
+            top: 10px;
+            left: 375px;
+            z-index: 100000;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
         #wiki-button {
             position: absolute;
             top: 10px;
-            left: 125px;
+            left: 505px;
             z-index: 100000;
             padding: 8px 12px;
             cursor: pointer;
@@ -255,6 +273,8 @@
 <div id="canvas">
     <div id="world"></div>
     <button id="delete-button">Delete selected</button>
+    <button id="parent-button">Parent selected</button>
+    <button id="unlink-button">Unlink selected</button>
     <button id="wiki-button">Wiki</button>
     <div id="wiki-window" class="wiki-window">
         <div id="wiki-titlebar" class="wiki-titlebar">
@@ -271,6 +291,8 @@
     const canvas = document.getElementById("canvas");
     const world = document.getElementById("world");
     const deleteButton = document.getElementById("delete-button");
+    const parentButton = document.getElementById("parent-button");
+    const unlinkButton = document.getElementById("unlink-button");
     const imagePicker = document.getElementById("image-picker");
     const wikiButton = document.getElementById("wiki-button");
     const wikiWindow = document.getElementById("wiki-window");
@@ -604,6 +626,8 @@
         images: []
     };
 
+    let selectionOrder = [];
+
     const roomChannel = supabaseClient.channel("room:" + roomId);
 
     async function saveRoom() {
@@ -644,7 +668,24 @@
             createImageFromState(imageState);
         }
 
+        // Parent relationships are stored separately from the world
+        // position. Rebuild their transforms after every image exists.
+        (roomState.images || []).forEach(state => {
+            if (!state.parentId) {
+                return;
+            }
+
+            const child = getImageElementById(state.id || state.url);
+            const parent = getImageElementById(state.parentId);
+
+            if (child && parent) {
+                updateChildParentTransform(child, parent);
+            }
+        });
+
         updateImageLayers();
+        selectionOrder = [];
+        updateSelectionControls();
     }
 
     function updateImageLayers() {
@@ -767,6 +808,19 @@
             (state.id || state.url) !== selectedImage._stateId
         );
 
+        roomState.images.forEach(state => {
+            if (state.parentId === selectedImage._stateId) {
+                delete state.parentId;
+                delete state.parentLocalX;
+                delete state.parentLocalY;
+                delete state.parentWidthRatio;
+                delete state.parentHeightRatio;
+                delete state.parentRotation;
+            }
+        });
+
+        selectionOrder = selectionOrder.filter(id => id !== selectedImage._stateId);
+        updateSelectionControls();
         await saveRoom();
     });
 
@@ -797,20 +851,7 @@
         imagePicker.replaceChildren();
     }
 
-    function selectImage(image) {
-        document.querySelectorAll(".image.selected").forEach(other => {
-            if (other !== image) {
-                removeResizeHandle(other);
-                other.classList.remove("selected");
-                updateNotes(other);
-            }
-        });
-
-        image.classList.add("selected");
-        addResizeHandle(image);
-    }
-
-    function showImagePicker(images, x, y) {
+    function showImagePicker(images, x, y) {(images, x, y) {
         imagePicker.replaceChildren();
 
         images.forEach(image => {
@@ -822,7 +863,7 @@
             item.addEventListener("click", event => {
                 event.preventDefault();
                 event.stopPropagation();
-                selectImage(image);
+                selectImage(image, false);
                 hideImagePicker();
             });
 
@@ -931,11 +972,7 @@
         }
 
         if (event.target === canvas) {
-            document.querySelectorAll(".image.selected").forEach(image => {
-                removeResizeHandle(image);
-                image.classList.remove("selected");
-                updateNotes(image);
-            });
+            clearSelection();
         }
     });
 
@@ -961,32 +998,234 @@
         await saveRoom();
     }
 
+    function getImageElementById(id) {
+        return Array.from(world.querySelectorAll(".image")).find(image =>
+            image._stateId === id
+        ) || null;
+    }
+
+    function getImageGeometry(image) {
+        const width = parseFloat(image.style.width) || image.offsetWidth;
+        const height = parseFloat(image.style.height) || image.offsetHeight;
+        const left = parseFloat(image.style.left) || 0;
+        const top = parseFloat(image.style.top) || 0;
+        const rotation = image._rotation || 0;
+
+        return {
+            width,
+            height,
+            left,
+            top,
+            centerX: left + width / 2,
+            centerY: top + height / 2,
+            rotation
+        };
+    }
+
+    function worldToParentLocal(pointX, pointY, parentGeometry) {
+        const angle = parentGeometry.rotation * Math.PI / 180;
+        const dx = pointX - parentGeometry.centerX;
+        const dy = pointY - parentGeometry.centerY;
+
+        return {
+            x: dx * Math.cos(angle) + dy * Math.sin(angle),
+            y: -dx * Math.sin(angle) + dy * Math.cos(angle)
+        };
+    }
+
+    function parentLocalToWorld(localX, localY, parentGeometry) {
+        const angle = parentGeometry.rotation * Math.PI / 180;
+
+        return {
+            x: parentGeometry.centerX +
+                localX * Math.cos(angle) -
+                localY * Math.sin(angle),
+            y: parentGeometry.centerY +
+                localX * Math.sin(angle) +
+                localY * Math.cos(angle)
+        };
+    }
+
+    function updateChildParentTransform(child, parent) {
+        const childState = getImageState(child);
+        const parentGeometry = getImageGeometry(parent);
+
+        if (!childState || !childState.parentId) {
+            return;
+        }
+
+        const localX = (childState.parentLocalX || 0) * parentGeometry.width;
+        const localY = (childState.parentLocalY || 0) * parentGeometry.height;
+        const worldCenter = parentLocalToWorld(localX, localY, parentGeometry);
+
+        const width = Math.max(1, (childState.parentWidthRatio || 1) * parentGeometry.width);
+        const height = Math.max(1, (childState.parentHeightRatio || 1) * parentGeometry.height);
+        const rotation = parentGeometry.rotation + (childState.parentRotation || 0);
+
+        child.style.width = width + "px";
+        child.style.height = height + "px";
+        child.style.left = (worldCenter.x - width / 2) + "px";
+        child.style.top = (worldCenter.y - height / 2) + "px";
+        child._rotation = rotation;
+        child.style.transform = "rotate(" + rotation + "deg)";
+
+        updateResizeHandle(child);
+        updateNotes(child);
+
+        updateChildrenFromParent(child);
+    }
+
+    function updateChildrenFromParent(parent) {
+        const parentState = getImageState(parent);
+        if (!parentState) {
+            return;
+        }
+
+        (roomState.images || []).forEach(state => {
+            if (state.parentId !== parent._stateId) {
+                return;
+            }
+
+            const child = getImageElementById(state.id || state.url);
+            if (child) {
+                updateChildParentTransform(child, parent);
+            }
+        });
+    }
+
+    function updateChildParentState(child) {
+        const childState = getImageState(child);
+        if (!childState || !childState.parentId) {
+            return;
+        }
+
+        const parent = getImageElementById(childState.parentId);
+        if (!parent) {
+            return;
+        }
+
+        const parentGeometry = getImageGeometry(parent);
+        const childGeometry = getImageGeometry(child);
+        const local = worldToParentLocal(
+            childGeometry.centerX,
+            childGeometry.centerY,
+            parentGeometry
+        );
+
+        childState.parentLocalX = local.x / parentGeometry.width;
+        childState.parentLocalY = local.y / parentGeometry.height;
+        childState.parentWidthRatio = childGeometry.width / parentGeometry.width;
+        childState.parentHeightRatio = childGeometry.height / parentGeometry.height;
+        childState.parentRotation = childGeometry.rotation - parentGeometry.rotation;
+    }
+
+    function setParent(child, parent) {
+        const childState = getImageState(child);
+        if (!childState || !parent || child === parent) {
+            return;
+        }
+
+        // Do not allow a cycle in the hierarchy.
+        let current = parent;
+        while (current) {
+            if (current._stateId === child._stateId) {
+                return;
+            }
+
+            const state = getImageState(current);
+            current = state && state.parentId
+                ? getImageElementById(state.parentId)
+                : null;
+        }
+
+        childState.parentId = parent._stateId;
+        updateChildParentState(child);
+    }
+
+    function unlinkImage(image) {
+        const imageState = getImageState(image);
+        if (!imageState || !imageState.parentId) {
+            return;
+        }
+
+        // The current CSS transform is already the child's world transform,
+        // so removing the parent relationship leaves it visually in place.
+        delete imageState.parentId;
+        delete imageState.parentLocalX;
+        delete imageState.parentLocalY;
+        delete imageState.parentWidthRatio;
+        delete imageState.parentHeightRatio;
+        delete imageState.parentRotation;
+    }
+
+    function updateSelectionControls() {
+        document.querySelectorAll(".image.selected").forEach(image => {
+            updateResizeHandle(image);
+            updateNotes(image);
+        });
+
+        const selected = selectionOrder
+            .map(id => getImageElementById(id))
+            .filter(Boolean);
+
+        parentButton.disabled = selected.length !== 2;
+        unlinkButton.disabled = selected.length !== 1 ||
+            !(getImageState(selected[0]) && getImageState(selected[0]).parentId);
+    }
+
+    function clearSelection() {
+        document.querySelectorAll(".image.selected").forEach(image => {
+            removeResizeHandle(image);
+            image.classList.remove("selected");
+            updateNotes(image);
+        });
+
+        selectionOrder = [];
+        updateSelectionControls();
+    }
+
+    function selectImage(image, additive = false) {
+        if (!additive) {
+            clearSelection();
+        }
+
+        const alreadySelected = image.classList.contains("selected");
+
+        if (additive && alreadySelected) {
+            removeResizeHandle(image);
+            image.classList.remove("selected");
+            selectionOrder = selectionOrder.filter(id => id !== image._stateId);
+            updateNotes(image);
+        } else {
+            image.classList.add("selected");
+            addResizeHandle(image);
+            if (!selectionOrder.includes(image._stateId)) {
+                selectionOrder.push(image._stateId);
+            }
+        }
+
+        updateSelectionControls();
+    }
+
     function makeDraggable(image) {
         let dragging = false;
         let grabOffsetX = 0;
         let grabOffsetY = 0;
 
         image.addEventListener("mousedown", event => {
-            // Middle mouse is reserved entirely for panning.
-            if (event.button === 1) {
+            if (event.button === 1 || event.button !== 0) {
                 return;
             }
 
-            // Only the primary mouse button selects or drags images.
-            if (event.button !== 0) {
+            const additive = event.shiftKey;
+            selectImage(image, additive);
+
+            // Shift-click is selection only. This makes selecting two images
+            // deterministic and preserves the order in which they were chosen.
+            if (additive) {
+                event.preventDefault();
                 return;
             }
-
-            document.querySelectorAll(".image.selected").forEach(other => {
-                if (other !== image) {
-                    removeResizeHandle(other);
-                    other.classList.remove("selected");
-                    updateNotes(other);
-                }
-            });
-
-            image.classList.add("selected");
-            addResizeHandle(image);
 
             const imageState = getImageState(image);
 
@@ -996,21 +1235,12 @@
                 return;
             }
 
-            const width = parseFloat(image.style.width) || image.offsetWidth;
-            const height = parseFloat(image.style.height) || image.offsetHeight;
-            const left = parseFloat(image.style.left) || 0;
-            const top = parseFloat(image.style.top) || 0;
-            const rotation = (image._rotation || 0) * Math.PI / 180;
-
-            // Work from the image's center and convert the grabbed point
-            // into the image's local, unrotated coordinate system. This
-            // keeps the exact point under the mouse when the image is rotated.
-            const centerX = left + width / 2;
-            const centerY = top + height / 2;
+            const geometry = getImageGeometry(image);
+            const rotation = geometry.rotation * Math.PI / 180;
             const mouseWorldX = screenToWorldX(event.clientX);
             const mouseWorldY = screenToWorldY(event.clientY);
-            const deltaX = mouseWorldX - centerX;
-            const deltaY = mouseWorldY - centerY;
+            const deltaX = mouseWorldX - geometry.centerX;
+            const deltaY = mouseWorldY - geometry.centerY;
 
             grabOffsetX =
                 deltaX * Math.cos(rotation) +
@@ -1028,14 +1258,11 @@
                 return;
             }
 
-            const width = parseFloat(image.style.width) || image.offsetWidth;
-            const height = parseFloat(image.style.height) || image.offsetHeight;
-            const rotation = (image._rotation || 0) * Math.PI / 180;
-
+            const geometry = getImageGeometry(image);
+            const rotation = geometry.rotation * Math.PI / 180;
             const mouseWorldX = screenToWorldX(event.clientX);
             const mouseWorldY = screenToWorldY(event.clientY);
 
-            // Convert the local grab offset back into world coordinates.
             const worldOffsetX =
                 grabOffsetX * Math.cos(rotation) -
                 grabOffsetY * Math.sin(rotation);
@@ -1046,9 +1273,14 @@
             const centerX = mouseWorldX - worldOffsetX;
             const centerY = mouseWorldY - worldOffsetY;
 
-            image.style.left = centerX - width / 2 + "px";
-            image.style.top = centerY - height / 2 + "px";
+            image.style.left = centerX - geometry.width / 2 + "px";
+            image.style.top = centerY - geometry.height / 2 + "px";
 
+            if (getImageState(image)?.parentId) {
+                updateChildParentState(image);
+            }
+
+            updateChildrenFromParent(image);
             updateResizeHandle(image);
             updateNotes(image);
         });
@@ -1059,6 +1291,7 @@
             }
 
             dragging = false;
+            updateChildParentState(image);
             await saveImagePosition(image);
         });
     }
@@ -1366,12 +1599,15 @@
                 image._rotation = currentRotation + delta;
                 image.style.transform = "rotate(" + image._rotation + "deg)";
 
+                updateChildParentState(image);
+                updateChildrenFromParent(image);
                 updateHandle();
             };
 
             const stopRotate = async () => {
                 document.removeEventListener("mousemove", rotate);
                 document.removeEventListener("mouseup", stopRotate);
+                updateChildParentState(image);
                 await saveImagePosition(image);
             };
 
@@ -1426,12 +1662,15 @@
                 image.style.top =
                     (screenToWorldY(centerY) - newHeight / 2) + "px";
 
+                updateChildParentState(image);
+                updateChildrenFromParent(image);
                 updateHandle();
             };
 
             const stopResize = async () => {
                 document.removeEventListener("mousemove", resize);
                 document.removeEventListener("mouseup", stopResize);
+                updateChildParentState(image);
                 await saveImagePosition(image);
             };
 
@@ -1476,6 +1715,49 @@
 
         image._updateResizeHandle = null;
     }
+    parentButton.addEventListener("click", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const selected = selectionOrder
+            .map(id => getImageElementById(id))
+            .filter(Boolean);
+
+        if (selected.length !== 2) {
+            return;
+        }
+
+        const parent = selected[0];
+        const child = selected[1];
+        const childState = getImageState(child);
+
+        if (!childState || childState.locked) {
+            return;
+        }
+
+        setParent(child, parent);
+        updateChildrenFromParent(parent);
+        updateSelectionControls();
+        await saveRoom();
+    });
+
+    unlinkButton.addEventListener("click", async event => {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const selected = selectionOrder
+            .map(id => getImageElementById(id))
+            .filter(Boolean);
+
+        if (selected.length !== 1) {
+            return;
+        }
+
+        unlinkImage(selected[0]);
+        updateSelectionControls();
+        await saveRoom();
+    });
+
 </script>
 
 </body>
