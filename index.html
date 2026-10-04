@@ -625,6 +625,8 @@
         images: []
     };
 
+    const clientId = crypto.randomUUID();
+
     const roomChannel = supabaseClient.channel("room:" + roomId);
 
     async function saveRoom() {
@@ -645,7 +647,8 @@
             type: "broadcast",
             event: "state",
             payload: {
-                state: roomState
+                state: roomState,
+                sender: clientId
             }
         });
 
@@ -775,6 +778,10 @@
             { event: "state" },
             payload => {
                 if (!payload.payload || !payload.payload.state) {
+                    return;
+                }
+
+                if (payload.payload.sender === clientId) {
                     return;
                 }
 
