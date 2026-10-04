@@ -370,6 +370,22 @@
     const unlinkButton = document.getElementById("unlink-button");
     const placedButton = document.getElementById("placed-button");
     const placedPanel = document.getElementById("placed-panel");
+
+    // Handles and notes scale with the image: factor = current width divided
+    // by the image's original (natural) width, limited to this range so the
+    // controls stay usable for extremely shrunk or enlarged images.
+    const UI_SCALE_MIN = 0.25;
+    const UI_SCALE_MAX = 4;
+
+    function getUiScale(image, width) {
+        const naturalWidth = image.naturalWidth;
+
+        if (!naturalWidth || !width) {
+            return 1;
+        }
+
+        return Math.min(UI_SCALE_MAX, Math.max(UI_SCALE_MIN, width / naturalWidth));
+    }
     const wikiWindow = document.getElementById("wiki-window");
     const wikiTitlebar = document.getElementById("wiki-titlebar");
     const wikiOpenButton = document.getElementById("wiki-open");
@@ -1596,7 +1612,8 @@
             // Attach the notes container to a fixed point in the image's
             // local coordinate system: just outside the right edge, at
             // the image's vertical center. Rotate that point with the image.
-            const localX = width / 2 + 12;
+            const uiScale = getUiScale(image, width);
+            const localX = width / 2 + 12 * uiScale;
             const localY = 0;
             const anchorX =
                 centerX +
@@ -1607,8 +1624,10 @@
                 localX * Math.sin(angle) +
                 localY * Math.cos(angle);
 
-            const notesWidth = Math.max(120, width * 0.5);
-            const notesHeight = Math.max(80, height * 0.5);
+            // Size the box as if the image were at its original size, then
+            // scale the whole box (button and text included) with the image.
+            const notesWidth = Math.max(120, (width / uiScale) * 0.5);
+            const notesHeight = Math.max(80, (height / uiScale) * 0.5);
 
             notesContainer.style.left = anchorX + "px";
             // The notes container rotates around its left-center point.
@@ -1616,7 +1635,8 @@
             notesContainer.style.top = (anchorY - notesHeight / 2) + "px";
             notesContainer.style.width = notesWidth + "px";
             notesContainer.style.height = notesHeight + "px";
-            notesContainer.style.transform = "rotate(" + (image._rotation || 0) + "deg)";
+            notesContainer.style.transform =
+                "rotate(" + (image._rotation || 0) + "deg) scale(" + uiScale + ")";
         };
 
         notesButton.addEventListener("mousedown", event => {
@@ -1836,6 +1856,24 @@
 
             placeButton.style.left = "-6px";
             placeButton.style.top = "calc(100% + 12px)";
+
+            // Scale every handle with the image. Each one is scaled around
+            // the point where it attaches to the image (given in the handle's
+            // own coordinates), so distances to the image scale as well.
+            const uiScale = getUiScale(image, width);
+            const scaleText = "scale(" + uiScale + ")";
+
+            handle.style.transformOrigin = "50% 50%";
+            handle.style.transform = scaleText;
+
+            rotateHandle.style.transformOrigin = "9px 64px";
+            rotateHandle.style.transform = "translateX(-50%) " + scaleText;
+
+            lockHandle.style.transformOrigin = "6px 32px";
+            lockHandle.style.transform = scaleText;
+
+            placeButton.style.transformOrigin = "6px -12px";
+            placeButton.style.transform = scaleText;
 
             const currentImageState = getImageState(image);
             const currentLocked = currentImageState && currentImageState.locked;
