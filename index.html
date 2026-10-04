@@ -936,15 +936,6 @@
             -deltaX * Math.sin(angle) +
             deltaY * Math.cos(angle);
 
-        childImage._parentLocalX = childState.parentLocalX;
-        childImage._parentLocalY = childState.parentLocalY;
-
-        // Keep the relationship directly on the live image as well as in
-        // roomState so movement does not depend on a later rerender.
-        childImage._parentId = childState.parentId;
-        childImage._parentLocalX = childState.parentLocalX;
-        childImage._parentLocalY = childState.parentLocalY;
-
         updateParentButtons();
         await saveRoom();
     });
@@ -1121,35 +1112,38 @@
             return;
         }
 
+        const parentId = parentState.id || parentState.url;
         const parentWidth = parseFloat(parentImage.style.width) || parentImage.offsetWidth;
         const parentHeight = parseFloat(parentImage.style.height) || parentImage.offsetHeight;
         const parentCenterX = (parseFloat(parentImage.style.left) || 0) + parentWidth / 2;
         const parentCenterY = (parseFloat(parentImage.style.top) || 0) + parentHeight / 2;
         const angle = (parentImage._rotation || 0) * Math.PI / 180;
 
-        Array.from(document.querySelectorAll(".image")).forEach(childImage => {
-            if (childImage._parentId !== (parentState.id || parentState.url)) {
+        (roomState.images || []).forEach(childState => {
+            if (childState.parentId !== parentId) {
+                return;
+            }
+
+            const childImage = Array.from(document.querySelectorAll(".image"))
+                .find(image => image._stateId === (childState.id || childState.url));
+
+            if (!childImage) {
                 return;
             }
 
             if (
-                typeof childImage._parentLocalX !== "number" ||
-                typeof childImage._parentLocalY !== "number"
+                typeof childState.parentLocalX !== "number" ||
+                typeof childState.parentLocalY !== "number"
             ) {
                 return;
             }
 
-            const childState = getImageState(childImage);
-            if (!childState) {
-                return;
-            }
-
             const worldOffsetX =
-                childImage._parentLocalX * Math.cos(angle) -
-                childImage._parentLocalY * Math.sin(angle);
+                childState.parentLocalX * Math.cos(angle) -
+                childState.parentLocalY * Math.sin(angle);
             const worldOffsetY =
-                childImage._parentLocalX * Math.sin(angle) +
-                childImage._parentLocalY * Math.cos(angle);
+                childState.parentLocalX * Math.sin(angle) +
+                childState.parentLocalY * Math.cos(angle);
 
             const childWidth = parseFloat(childImage.style.width) || childImage.offsetWidth;
             const childHeight = parseFloat(childImage.style.height) || childImage.offsetHeight;
@@ -1162,8 +1156,6 @@
 
             childState.left = parseFloat(childImage.style.left) || 0;
             childState.top = parseFloat(childImage.style.top) || 0;
-            childState.width = childImage.offsetWidth;
-            childState.height = childImage.offsetHeight;
 
             updateResizeHandle(childImage);
             updateNotes(childImage);
@@ -1172,12 +1164,12 @@
 
     function updateChildLocalPosition(childImage) {
         const childState = getImageState(childImage);
-        if (!childState || !childImage._parentId) {
+        if (!childState || !childState.parentId) {
             return;
         }
 
         const parentImage = Array.from(document.querySelectorAll(".image"))
-            .find(image => image._stateId === childImage._parentId);
+            .find(image => image._stateId === childState.parentId);
 
         if (!parentImage) {
             return;
