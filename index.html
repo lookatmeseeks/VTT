@@ -192,6 +192,23 @@
             line-height: 18px;
         }
 
+        #parent-button,
+        #unlink-button {
+            position: absolute;
+            top: 10px;
+            z-index: 100000;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        #parent-button {
+            left: 245px;
+        }
+
+        #unlink-button {
+            left: 340px;
+        }
+
         #wiki-button {
             position: absolute;
             top: 10px;
@@ -256,6 +273,8 @@
     <div id="world"></div>
     <button id="delete-button">Delete selected</button>
     <button id="wiki-button">Wiki</button>
+    <button id="parent-button" disabled>Parent</button>
+    <button id="unlink-button" disabled>Unlink</button>
     <div id="wiki-window" class="wiki-window">
         <div id="wiki-titlebar" class="wiki-titlebar">
             <span class="wiki-title">Local Wiki</span>
@@ -273,6 +292,8 @@
     const deleteButton = document.getElementById("delete-button");
     const imagePicker = document.getElementById("image-picker");
     const wikiButton = document.getElementById("wiki-button");
+    const parentButton = document.getElementById("parent-button");
+    const unlinkButton = document.getElementById("unlink-button");
     const wikiWindow = document.getElementById("wiki-window");
     const wikiTitlebar = document.getElementById("wiki-titlebar");
     const wikiOpenButton = document.getElementById("wiki-open");
@@ -797,18 +818,27 @@
         imagePicker.replaceChildren();
     }
 
+    function updateParentButtons() {
+        const selectedImages = document.querySelectorAll(".image.selected");
+        parentButton.disabled = selectedImages.length !== 2;
+        unlinkButton.disabled = true;
+    }
+
     function clearImageSelection() {
         document.querySelectorAll(".image.selected").forEach(image => {
             removeResizeHandle(image);
             image.classList.remove("selected");
             updateNotes(image);
         });
+
+        updateParentButtons();
     }
 
     function selectImage(image) {
         clearImageSelection();
         image.classList.add("selected");
         addResizeHandle(image);
+        updateParentButtons();
     }
 
     function toggleImageSelection(image) {
@@ -820,7 +850,17 @@
             image.classList.add("selected");
             addResizeHandle(image);
         }
+
+        updateParentButtons();
     }
+
+    parentButton.addEventListener("click", event => {
+        event.preventDefault();
+    });
+
+    unlinkButton.addEventListener("click", event => {
+        event.preventDefault();
+    });
 
     function showImagePicker(images, x, y) {
         imagePicker.replaceChildren();
