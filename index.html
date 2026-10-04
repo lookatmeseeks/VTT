@@ -797,17 +797,29 @@
         imagePicker.replaceChildren();
     }
 
-    function selectImage(image) {
-        document.querySelectorAll(".image.selected").forEach(other => {
-            if (other !== image) {
-                removeResizeHandle(other);
-                other.classList.remove("selected");
-                updateNotes(other);
-            }
+    function clearImageSelection() {
+        document.querySelectorAll(".image.selected").forEach(image => {
+            removeResizeHandle(image);
+            image.classList.remove("selected");
+            updateNotes(image);
         });
+    }
 
+    function selectImage(image) {
+        clearImageSelection();
         image.classList.add("selected");
         addResizeHandle(image);
+    }
+
+    function toggleImageSelection(image) {
+        if (image.classList.contains("selected")) {
+            removeResizeHandle(image);
+            image.classList.remove("selected");
+            updateNotes(image);
+        } else {
+            image.classList.add("selected");
+            addResizeHandle(image);
+        }
     }
 
     function showImagePicker(images, x, y) {
@@ -931,11 +943,7 @@
         }
 
         if (event.target === canvas) {
-            document.querySelectorAll(".image.selected").forEach(image => {
-                removeResizeHandle(image);
-                image.classList.remove("selected");
-                updateNotes(image);
-            });
+            clearImageSelection();
         }
     });
 
@@ -977,14 +985,13 @@
                 return;
             }
 
-            document.querySelectorAll(".image.selected").forEach(other => {
-                if (other !== image) {
-                    removeResizeHandle(other);
-                    other.classList.remove("selected");
-                    updateNotes(other);
-                }
-            });
+            if (event.shiftKey) {
+                toggleImageSelection(image);
+                event.preventDefault();
+                return;
+            }
 
+            clearImageSelection();
             image.classList.add("selected");
             addResizeHandle(image);
 
