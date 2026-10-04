@@ -104,6 +104,36 @@
             display: block;
         }
 
+        .image-picker {
+            position: fixed;
+            display: none;
+            min-width: 180px;
+            max-width: 320px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 100001;
+            padding: 4px;
+            background: #222;
+            border: 1px solid #777;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .image-picker-item {
+            display: block;
+            width: 100%;
+            box-sizing: border-box;
+            padding: 7px 9px;
+            border: 0;
+            background: transparent;
+            color: white;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .image-picker-item:hover {
+            background: #444;
+        }
+
         .resize-handle {
             position: absolute;
             width: 18px;
@@ -160,12 +190,14 @@
 <div id="canvas">
     <div id="world"></div>
     <button id="delete-button">Delete selected</button>
+    <div id="image-picker" class="image-picker"></div>
 </div>
 
 <script>
     const canvas = document.getElementById("canvas");
     const world = document.getElementById("world");
     const deleteButton = document.getElementById("delete-button");
+    const imagePicker = document.getElementById("image-picker");
 
     let viewX = 0;
     let viewY = 0;
@@ -288,6 +320,7 @@
         image.className = "image";
         image.src = imageState.url;
         image._stateId = imageState.id || imageState.url;
+        image._fileName = imageState.name || getImageDisplayName(imageState);
 
         image.style.left = imageState.left + "px";
         image.style.top = imageState.top + "px";
@@ -391,6 +424,96 @@
         await saveRoom();
     });
 
+    function getImageDisplayName(imageState) {
+        if (imageState && imageState.name) {
+            return imageState.name;
+        }
+
+        if (!imageState || !imageState.url) {
+            return "Unnamed image";
+        }
+
+        try {
+            const path = new URL(imageState.url).pathname;
+            let name = decodeURIComponent(path.substring(path.lastIndexOf("/") + 1));
+            name = name.replace(
+                /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/,
+                ""
+            );
+            return name || "Unnamed image";
+        } catch {
+            return "Unnamed image";
+        }
+    }
+
+    function hideImagePicker() {
+        imagePicker.style.display = "none";
+        imagePicker.replaceChildren();
+    }
+
+    function selectImage(image) {
+        document.querySelectorAll(".image.selected").forEach(other => {
+            if (other !== image) {
+                removeResizeHandle(other);
+                other.classList.remove("selected");
+                updateNotes(other);
+            }
+        });
+
+        image.classList.add("selected");
+        addResizeHandle(image);
+    }
+
+    function showImagePicker(images, x, y) {
+        imagePicker.replaceChildren();
+
+        images.forEach(image => {
+            const item = document.createElement("button");
+            item.className = "image-picker-item";
+            item.type = "button";
+            item.textContent = image._fileName || "Unnamed image";
+
+            item.addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                selectImage(image);
+                hideImagePicker();
+            });
+
+            imagePicker.appendChild(item);
+        });
+
+        imagePicker.style.left = Math.min(x, window.innerWidth - 330) + "px";
+        imagePicker.style.top = Math.min(y, window.innerHeight - 310) + "px";
+        imagePicker.style.display = "block";
+    }
+
+    canvas.addEventListener("contextmenu", event => {
+        event.preventDefault();
+
+        const images = document.elementsFromPoint(event.clientX, event.clientY)
+            .filter(element => element.classList && element.classList.contains("image"));
+
+        if (images.length === 0) {
+            hideImagePicker();
+            return;
+        }
+
+        if (images.length === 1) {
+            selectImage(images[0]);
+            hideImagePicker();
+            return;
+        }
+
+        showImagePicker(images, event.clientX, event.clientY);
+    });
+
+    document.addEventListener("mousedown", event => {
+        if (!imagePicker.contains(event.target)) {
+            hideImagePicker();
+        }
+    });
+
     canvas.addEventListener("dragover", event => {
         event.preventDefault();
     });
@@ -433,6 +556,7 @@
                 height: 0,
                 rotation: 0,
                 locked: false,
+                name: file.name,
                 notes: "",
                 notesVisible: false
             };
