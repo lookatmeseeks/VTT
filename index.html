@@ -201,6 +201,28 @@
             cursor: pointer;
         }
 
+        #link-button {
+            position: absolute;
+            top: 10px;
+            left: 190px;
+            z-index: 100000;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        #unlink-button {
+            position: absolute;
+            top: 10px;
+            left: 255px;
+            z-index: 100000;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        #unlink-button:disabled {
+            cursor: default;
+        }
+
         .wiki-window {
             position: fixed;
             display: none;
@@ -256,6 +278,8 @@
     <div id="world"></div>
     <button id="delete-button">Delete selected</button>
     <button id="wiki-button">Wiki</button>
+    <button id="link-button" title="Select 2 or more images (hold Shift), then click Link">Link</button>
+    <button id="unlink-button" title="Remove the selected image(s) from their link" disabled>Unlink</button>
     <div id="wiki-window" class="wiki-window">
         <div id="wiki-titlebar" class="wiki-titlebar">
             <span class="wiki-title">Local Wiki</span>
@@ -273,6 +297,8 @@
     const deleteButton = document.getElementById("delete-button");
     const imagePicker = document.getElementById("image-picker");
     const wikiButton = document.getElementById("wiki-button");
+    const linkButton = document.getElementById("link-button");
+    const unlinkButton = document.getElementById("unlink-button");
     const wikiWindow = document.getElementById("wiki-window");
     const wikiTitlebar = document.getElementById("wiki-titlebar");
     const wikiOpenButton = document.getElementById("wiki-open");
@@ -767,6 +793,8 @@
             (state.id || state.url) !== selectedImage._stateId
         );
 
+        cleanupLinkGroups();
+
         await saveRoom();
     });
 
@@ -797,20 +825,22 @@
         imagePicker.replaceChildren();
     }
 
-    function selectImage(image) {
-        document.querySelectorAll(".image.selected").forEach(other => {
-            if (other !== image) {
-                removeResizeHandle(other);
-                other.classList.remove("selected");
-                updateNotes(other);
-            }
-        });
+    function selectImage(image, additive = false) {
+        if (!additive) {
+            document.querySelectorAll(".image.selected").forEach(other => {
+                if (other !== image) {
+                    removeResizeHandle(other);
+                    other.classList.remove("selected");
+                    updateNotes(other);
+                }
+            });
+        }
 
         image.classList.add("selected");
         addResizeHandle(image);
     }
 
-    function showImagePicker(images, x, y) {
+    function showImagePicker(images, x, y, additive = false) {
         imagePicker.replaceChildren();
 
         images.forEach(image => {
@@ -822,7 +852,7 @@
             item.addEventListener("click", event => {
                 event.preventDefault();
                 event.stopPropagation();
-                selectImage(image);
+                selectImage(image, additive);
                 hideImagePicker();
             });
 
@@ -846,12 +876,12 @@
         }
 
         if (images.length === 1) {
-            selectImage(images[0]);
+            selectImage(images[0], event.shiftKey);
             hideImagePicker();
             return;
         }
 
-        showImagePicker(images, event.clientX, event.clientY);
+        showImagePicker(images, event.clientX, event.clientY, event.shiftKey);
     });
 
     document.addEventListener("mousedown", event => {
@@ -961,10 +991,119 @@
         await saveRoom();
     }
 
+    // ---- Image linking -------------------------------------------------
+    // Linked images share the same `linkId` in their state entry. Only
+    // position (dragging) is shared; lock, layer, size and rotation stay
+    // per image.
+
+    function getLinkId(image) {
+        const state = getImageState(image);
+        return state && state.linkId ? state.linkId : null;
+    }
+
+    function getLinkedImages(image) {
+        const linkId = getLinkId(image);
+
+        if (!linkId) {
+            return [];
+        }
+
+        return Array.from(world.querySelectorAll(".image")).filter(other =>
+            other !== image && getLinkId(other) === linkId
+        );
+    }
+
+    // A link group with fewer than 2 members is meaningless, so dissolve it.
+    function cleanupLinkGroups() {
+        const counts = new Map();
+
+        for (const state of roomState.images) {
+            if (state.linkId) {
+                counts.set(state.linkId, (counts.get(state.linkId) || 0) + 1);
+            }
+        }
+
+        for (const state of roomState.images) {
+            if (state.linkId && counts.get(state.linkId) < 2) {
+                delete state.linkId;
+            }
+        }
+    }
+
+    function updateLinkButtons() {
+        const selected = Array.from(document.querySelectorAll(".image.selected"));
+        unlinkButton.disabled = !selected.some(image => getLinkId(image));
+    }
+
+    linkButton.addEventListener("click", async event => {
+        event.stopPropagation();
+
+        const selected = Array.from(document.querySelectorAll(".image.selected"));
+        const states = selected.map(image => getImageState(image)).filter(Boolean);
+
+        if (states.length < 2) {
+            return;
+        }
+
+        // If some selected images already belong to a group, merge those
+        // whole groups into the new one.
+        const oldIds = new Set(states.map(state => state.linkId).filter(Boolean));
+        const newId = crypto.randomUUID();
+
+        for (const state of roomState.images) {
+            if (state.linkId && oldIds.has(state.linkId)) {
+                state.linkId = newId;
+            }
+        }
+
+        states.forEach(state => {
+            state.linkId = newId;
+        });
+
+        updateLinkButtons();
+        await saveRoom();
+    });
+
+    unlinkButton.addEventListener("click", async event => {
+        event.stopPropagation();
+
+        const selected = Array.from(document.querySelectorAll(".image.selected"));
+        let changed = false;
+
+        for (const image of selected) {
+            const state = getImageState(image);
+
+            if (state && state.linkId) {
+                delete state.linkId;
+                changed = true;
+            }
+        }
+
+        if (!changed) {
+            return;
+        }
+
+        cleanupLinkGroups();
+        updateLinkButtons();
+        await saveRoom();
+    });
+
+    // Selection is changed in several places; watching the selected class
+    // keeps the Unlink button correct without touching all of them.
+    new MutationObserver(updateLinkButtons).observe(world, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ["class"]
+    });
+
     function makeDraggable(image) {
         let dragging = false;
         let grabOffsetX = 0;
         let grabOffsetY = 0;
+        let dragStartLeft = 0;
+        let dragStartTop = 0;
+        let linkedStart = [];
 
         image.addEventListener("mousedown", event => {
             // Middle mouse is reserved entirely for panning.
@@ -974,6 +1113,23 @@
 
             // Only the primary mouse button selects or drags images.
             if (event.button !== 0) {
+                return;
+            }
+
+            // Shift+click adds/removes this image from the selection
+            // without deselecting the others, and never starts a drag.
+            if (event.shiftKey) {
+                event.preventDefault();
+
+                if (image.classList.contains("selected")) {
+                    removeResizeHandle(image);
+                    image.classList.remove("selected");
+                    updateNotes(image);
+                } else {
+                    image.classList.add("selected");
+                    addResizeHandle(image);
+                }
+
                 return;
             }
 
@@ -1019,6 +1175,21 @@
                 -deltaX * Math.sin(rotation) +
                 deltaY * Math.cos(rotation);
 
+            // Remember where linked partners started. Locked partners
+            // stay where they are (lock is unaffected by the link).
+            dragStartLeft = left;
+            dragStartTop = top;
+            linkedStart = getLinkedImages(image)
+                .filter(other => {
+                    const otherState = getImageState(other);
+                    return !(otherState && otherState.locked);
+                })
+                .map(other => ({
+                    image: other,
+                    left: parseFloat(other.style.left) || 0,
+                    top: parseFloat(other.style.top) || 0
+                }));
+
             dragging = true;
             event.preventDefault();
         });
@@ -1046,11 +1217,29 @@
             const centerX = mouseWorldX - worldOffsetX;
             const centerY = mouseWorldY - worldOffsetY;
 
-            image.style.left = centerX - width / 2 + "px";
-            image.style.top = centerY - height / 2 + "px";
+            const newLeft = centerX - width / 2;
+            const newTop = centerY - height / 2;
+
+            image.style.left = newLeft + "px";
+            image.style.top = newTop + "px";
 
             updateResizeHandle(image);
             updateNotes(image);
+
+            const deltaLeft = newLeft - dragStartLeft;
+            const deltaTop = newTop - dragStartTop;
+
+            for (const item of linkedStart) {
+                if (!item.image.isConnected) {
+                    continue;
+                }
+
+                item.image.style.left = (item.left + deltaLeft) + "px";
+                item.image.style.top = (item.top + deltaTop) + "px";
+
+                updateResizeHandle(item.image);
+                updateNotes(item.image);
+            }
         });
 
         document.addEventListener("mouseup", async () => {
@@ -1059,6 +1248,19 @@
             }
 
             dragging = false;
+
+            // Update the partners' state first; saveImagePosition then
+            // saves the whole room (including them) in one request.
+            for (const item of linkedStart) {
+                const partnerState = getImageState(item.image);
+
+                if (partnerState) {
+                    partnerState.left = parseFloat(item.image.style.left) || 0;
+                    partnerState.top = parseFloat(item.image.style.top) || 0;
+                }
+            }
+
+            linkedStart = [];
             await saveImagePosition(image);
         });
     }
