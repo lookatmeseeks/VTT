@@ -818,10 +818,19 @@
         imagePicker.replaceChildren();
     }
 
+    let selectionOrder = [];
+
     function updateParentButtons() {
         const selectedImages = document.querySelectorAll(".image.selected");
+
         parentButton.disabled = selectedImages.length !== 2;
-        unlinkButton.disabled = true;
+
+        const selectedStates = selectionOrder
+            .map(image => getImageState(image))
+            .filter(Boolean);
+
+        const hasParent = selectedStates.some(state => state.parentId);
+        unlinkButton.disabled = !hasParent;
     }
 
     function clearImageSelection() {
@@ -831,6 +840,7 @@
             updateNotes(image);
         });
 
+        selectionOrder = [];
         updateParentButtons();
     }
 
@@ -838,6 +848,7 @@
         clearImageSelection();
         image.classList.add("selected");
         addResizeHandle(image);
+        selectionOrder = [image];
         updateParentButtons();
     }
 
@@ -846,20 +857,58 @@
             removeResizeHandle(image);
             image.classList.remove("selected");
             updateNotes(image);
+            selectionOrder = selectionOrder.filter(other => other !== image);
         } else {
             image.classList.add("selected");
             addResizeHandle(image);
+            selectionOrder.push(image);
         }
 
         updateParentButtons();
     }
 
-    parentButton.addEventListener("click", event => {
+    parentButton.addEventListener("click", async event => {
         event.preventDefault();
+
+        if (selectionOrder.length !== 2) {
+            return;
+        }
+
+        const parentImage = selectionOrder[0];
+        const childImage = selectionOrder[1];
+        const parentState = getImageState(parentImage);
+        const childState = getImageState(childImage);
+
+        if (!parentState || !childState) {
+            return;
+        }
+
+        childState.parentId = parentState.id || parentState.url;
+        await saveRoom();
+        updateParentButtons();
     });
 
-    unlinkButton.addEventListener("click", event => {
+    unlinkButton.addEventListener("click", async event => {
         event.preventDefault();
+
+        const selectedStates = selectionOrder
+            .map(image => getImageState(image))
+            .filter(Boolean);
+
+        let changed = false;
+
+        selectedStates.forEach(state => {
+            if (state.parentId) {
+                delete state.parentId;
+                changed = true;
+            }
+        });
+
+        if (changed) {
+            await saveRoom();
+        }
+
+        updateParentButtons();
     });
 
     function showImagePicker(images, x, y) {
