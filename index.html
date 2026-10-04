@@ -721,6 +721,10 @@
         image._rotation = imageState.rotation || 0;
         image.style.transform = "rotate(" + image._rotation + "deg)";
 
+        image._parentId = imageState.parentId || null;
+        image._parentLocalX = imageState.parentLocalX;
+        image._parentLocalY = imageState.parentLocalY;
+
         world.appendChild(image);
         makeDraggable(image);
         addNotes(image);
@@ -840,15 +844,15 @@
     let selectionOrder = [];
 
     function updateParentButtons() {
-        const selectedImages = document.querySelectorAll(".image.selected");
+        const selectedImages = Array.from(document.querySelectorAll(".image.selected"));
 
         parentButton.disabled = selectedImages.length !== 2;
 
-        const selectedStates = selectionOrder
-            .map(image => getImageState(image))
-            .filter(Boolean);
+        const hasParent = selectedImages.some(image => {
+            const state = getImageState(image);
+            return !!(state && state.parentId);
+        });
 
-        const hasParent = selectedStates.some(state => state.parentId);
         unlinkButton.disabled = !hasParent;
     }
 
@@ -925,8 +929,17 @@
             -deltaX * Math.sin(angle) +
             deltaY * Math.cos(angle);
 
-        await saveRoom();
+        childImage._parentLocalX = childState.parentLocalX;
+        childImage._parentLocalY = childState.parentLocalY;
+
+        // Keep the relationship directly on the live image as well as in
+        // roomState so movement does not depend on a later rerender.
+        childImage._parentId = childState.parentId;
+        childImage._parentLocalX = childState.parentLocalX;
+        childImage._parentLocalY = childState.parentLocalY;
+
         updateParentButtons();
+        await saveRoom();
     });
 
     unlinkButton.addEventListener("click", async event => {
@@ -940,9 +953,19 @@
 
         selectedStates.forEach(state => {
             if (state.parentId) {
+                const image = Array.from(document.querySelectorAll(".image"))
+                    .find(other => other._stateId === (state.id || state.url));
+
                 delete state.parentId;
                 delete state.parentLocalX;
                 delete state.parentLocalY;
+
+                if (image) {
+                    image._parentId = null;
+                    image._parentLocalX = undefined;
+                    image._parentLocalY = undefined;
+                }
+
                 changed = true;
             }
         });
@@ -1097,31 +1120,29 @@
         const parentCenterY = (parseFloat(parentImage.style.top) || 0) + parentHeight / 2;
         const angle = (parentImage._rotation || 0) * Math.PI / 180;
 
-        roomState.images.forEach(childState => {
-            if (childState.parentId !== (parentState.id || parentState.url)) {
+        Array.from(document.querySelectorAll(".image")).forEach(childImage => {
+            if (childImage._parentId !== (parentState.id || parentState.url)) {
                 return;
             }
 
             if (
-                typeof childState.parentLocalX !== "number" ||
-                typeof childState.parentLocalY !== "number"
+                typeof childImage._parentLocalX !== "number" ||
+                typeof childImage._parentLocalY !== "number"
             ) {
                 return;
             }
 
-            const childImage = Array.from(document.querySelectorAll(".image"))
-                .find(image => image._stateId === (childState.id || childState.url));
-
-            if (!childImage) {
+            const childState = getImageState(childImage);
+            if (!childState) {
                 return;
             }
 
             const worldOffsetX =
-                childState.parentLocalX * Math.cos(angle) -
-                childState.parentLocalY * Math.sin(angle);
+                childImage._parentLocalX * Math.cos(angle) -
+                childImage._parentLocalY * Math.sin(angle);
             const worldOffsetY =
-                childState.parentLocalX * Math.sin(angle) +
-                childState.parentLocalY * Math.cos(angle);
+                childImage._parentLocalX * Math.sin(angle) +
+                childImage._parentLocalY * Math.cos(angle);
 
             const childWidth = parseFloat(childImage.style.width) || childImage.offsetWidth;
             const childHeight = parseFloat(childImage.style.height) || childImage.offsetHeight;
@@ -1144,12 +1165,12 @@
 
     function updateChildLocalPosition(childImage) {
         const childState = getImageState(childImage);
-        if (!childState || !childState.parentId) {
+        if (!childState || !childImage._parentId) {
             return;
         }
 
         const parentImage = Array.from(document.querySelectorAll(".image"))
-            .find(image => image._stateId === childState.parentId);
+            .find(image => image._stateId === childImage._parentId);
 
         if (!parentImage) {
             return;
