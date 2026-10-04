@@ -566,8 +566,8 @@
 
             const left = parseFloat(image.style.left) || 0;
             const top = parseFloat(image.style.top) || 0;
-            const width = image.offsetWidth;
-            const height = image.offsetHeight;
+            const width = parseFloat(image.style.width) || image.offsetWidth;
+            const height = parseFloat(image.style.height) || image.offsetHeight;
             const angle = image._rotation || 0;
 
             controls.style.left = left + "px";
