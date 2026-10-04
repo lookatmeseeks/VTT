@@ -655,6 +655,10 @@
     }
 
     function renderRoomState() {
+        const selectedIds = selectionOrder
+            .map(image => image._stateId)
+            .filter(Boolean);
+
         document.querySelectorAll(".image").forEach(image => {
             removeResizeHandle(image);
             removeNotes(image);
@@ -666,6 +670,21 @@
         }
 
         updateImageLayers();
+
+        selectionOrder = [];
+
+        selectedIds.forEach(id => {
+            const image = Array.from(world.querySelectorAll(".image"))
+                .find(other => other._stateId === id);
+
+            if (image) {
+                image.classList.add("selected");
+                addResizeHandle(image);
+                selectionOrder.push(image);
+            }
+        });
+
+        updateParentButtons();
     }
 
     function updateImageLayers() {
@@ -1264,6 +1283,7 @@
             image.style.left = centerX - width / 2 + "px";
             image.style.top = centerY - height / 2 + "px";
 
+            updateChildrenForParent(image);
             updateResizeHandle(image);
             updateNotes(image);
         });
