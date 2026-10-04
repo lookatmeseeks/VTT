@@ -464,6 +464,7 @@
             document.querySelectorAll(".image.selected").forEach(image => {
                 removeResizeHandle(image);
                 image.classList.remove("selected");
+                updateNotes(image);
             });
         }
     });
@@ -510,6 +511,7 @@
                 if (other !== image) {
                     removeResizeHandle(other);
                     other.classList.remove("selected");
+                    updateNotes(other);
                 }
             });
 
