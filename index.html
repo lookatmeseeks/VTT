@@ -1021,6 +1021,7 @@
                 imageState.height = image.naturalHeight;
 
                 roomState.images.push(imageState);
+                updateImageLayers();
                 await saveRoom();
 
                 console.log("Saved image to room:", imageState);
@@ -1676,6 +1677,71 @@
         image._updateNotes = null;
     }
 
+    function getImageElementByStateId(stateId) {
+        return Array.from(world.querySelectorAll(".image")).find(other =>
+            other._stateId === stateId
+        ) || null;
+    }
+
+    // The four corners of an image in world coordinates (rotation included).
+    function getImageCorners(image) {
+        const left = parseFloat(image.style.left) || 0;
+        const top = parseFloat(image.style.top) || 0;
+        const width = parseFloat(image.style.width) || image.offsetWidth;
+        const height = parseFloat(image.style.height) || image.offsetHeight;
+        const angle = (image._rotation || 0) * Math.PI / 180;
+
+        const centerX = left + width / 2;
+        const centerY = top + height / 2;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+
+        return [
+            [-width / 2, -height / 2],
+            [width / 2, -height / 2],
+            [width / 2, height / 2],
+            [-width / 2, height / 2]
+        ].map(([x, y]) => [
+            centerX + x * cos - y * sin,
+            centerY + x * sin + y * cos
+        ]);
+    }
+
+    // Separating axis test for two convex polygons.
+    function polygonsOverlap(a, b) {
+        for (const polygon of [a, b]) {
+            for (let i = 0; i < polygon.length; i++) {
+                const p1 = polygon[i];
+                const p2 = polygon[(i + 1) % polygon.length];
+                const axisX = -(p2[1] - p1[1]);
+                const axisY = p2[0] - p1[0];
+
+                let minA = Infinity;
+                let maxA = -Infinity;
+                let minB = Infinity;
+                let maxB = -Infinity;
+
+                for (const p of a) {
+                    const d = p[0] * axisX + p[1] * axisY;
+                    minA = Math.min(minA, d);
+                    maxA = Math.max(maxA, d);
+                }
+
+                for (const p of b) {
+                    const d = p[0] * axisX + p[1] * axisY;
+                    minB = Math.min(minB, d);
+                    maxB = Math.max(maxB, d);
+                }
+
+                if (maxA <= minB || maxB <= minA) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     function addResizeHandle(image) {
         removeResizeHandle(image);
 
@@ -1813,8 +1879,13 @@
             await saveRoom();
         });
 
+        // Moves the image past the next image in that direction that it
+        // actually overlaps on screen. (Swapping with the next entry in the
+        // list is not enough: that neighbour is often somewhere else on
+        // the canvas, so nothing visible would change.)
         function moveLayer(direction) {
-            const currentIndex = roomState.images.findIndex(state =>
+            const images = roomState.images;
+            const currentIndex = images.findIndex(state =>
                 (state.id || state.url) === image._stateId
             );
 
@@ -1822,15 +1893,33 @@
                 return;
             }
 
-            const targetIndex = currentIndex + direction;
+            const currentCorners = getImageCorners(image);
+            let targetIndex = -1;
 
-            if (targetIndex < 0 || targetIndex >= roomState.images.length) {
+            for (
+                let i = currentIndex + direction;
+                i >= 0 && i < images.length;
+                i += direction
+            ) {
+                const other = getImageElementByStateId(images[i].id || images[i].url);
+
+                if (!other) {
+                    continue;
+                }
+
+                if (polygonsOverlap(currentCorners, getImageCorners(other))) {
+                    targetIndex = i;
+                    break;
+                }
+            }
+
+            // Nothing overlapping in that direction: already at the end.
+            if (targetIndex < 0) {
                 return;
             }
 
-            const temp = roomState.images[currentIndex];
-            roomState.images[currentIndex] = roomState.images[targetIndex];
-            roomState.images[targetIndex] = temp;
+            const moved = images.splice(currentIndex, 1)[0];
+            images.splice(targetIndex, 0, moved);
 
             updateImageLayers();
             saveRoom();
