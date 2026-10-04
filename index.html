@@ -909,19 +909,14 @@
             roomState.images[currentIndex] = roomState.images[targetIndex];
             roomState.images[targetIndex] = temp;
 
-            const targetImage = Array.from(world.querySelectorAll(".image")).find(other =>
+            const targetElement = Array.from(world.querySelectorAll(".image")).find(other =>
                 other._stateId === roomState.images[targetIndex]._stateId
             );
 
-            if (direction > 0) {
-                world.appendChild(image);
-            } else {
-                const images = Array.from(world.querySelectorAll(".image"));
-                const targetElement = images.find(other =>
-                    other._stateId === roomState.images[targetIndex]._stateId
-                );
-
-                if (targetElement) {
+            if (targetElement) {
+                if (direction > 0) {
+                    world.insertBefore(image, targetElement.nextSibling);
+                } else {
                     world.insertBefore(image, targetElement);
                 }
             }
