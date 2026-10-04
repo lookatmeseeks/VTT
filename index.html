@@ -219,6 +219,73 @@
             cursor: default;
         }
 
+        #placed-button {
+            position: absolute;
+            top: 10px;
+            left: 335px;
+            z-index: 100000;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        #placed-button:disabled {
+            cursor: default;
+        }
+
+        .placed-panel {
+            position: absolute;
+            display: none;
+            top: 50px;
+            left: 335px;
+            min-width: 220px;
+            max-width: 340px;
+            max-height: 320px;
+            overflow-y: auto;
+            z-index: 100001;
+            padding: 4px;
+            background: #222;
+            border: 1px solid #777;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        }
+
+        .placed-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .placed-thumb {
+            width: 32px;
+            height: 32px;
+            object-fit: contain;
+            background: #333;
+            flex: none;
+        }
+
+        .placed-empty {
+            padding: 7px 9px;
+            color: #aaa;
+        }
+
+        /* Images that were "set in place" are inert background: they
+           ignore the mouse, so clicks go to whatever is underneath. */
+        .image.placed {
+            pointer-events: none;
+        }
+
+        .place-button {
+            position: absolute;
+            padding: 3px 8px;
+            border: 1px solid black;
+            background: white;
+            color: black;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 18px;
+            white-space: nowrap;
+            z-index: 99999;
+        }
+
         .wiki-window {
             position: fixed;
             display: none;
@@ -276,6 +343,8 @@
     <button id="wiki-button">Wiki</button>
     <button id="link-button" title="Select 2 or more images (hold Shift), then click Link">Link</button>
     <button id="unlink-button" title="Remove the selected image(s) from their link" disabled>Unlink</button>
+    <button id="placed-button" title="Images that were set in place" disabled>Placed images</button>
+    <div id="placed-panel" class="placed-panel"></div>
     <div id="wiki-window" class="wiki-window">
         <div id="wiki-titlebar" class="wiki-titlebar">
             <span class="wiki-title">Local Wiki</span>
@@ -295,6 +364,8 @@
     const wikiButton = document.getElementById("wiki-button");
     const linkButton = document.getElementById("link-button");
     const unlinkButton = document.getElementById("unlink-button");
+    const placedButton = document.getElementById("placed-button");
+    const placedPanel = document.getElementById("placed-panel");
     const wikiWindow = document.getElementById("wiki-window");
     const wikiTitlebar = document.getElementById("wiki-titlebar");
     const wikiOpenButton = document.getElementById("wiki-open");
@@ -686,6 +757,11 @@
 
         image.className = "image";
         image.draggable = false;
+
+        if (imageState.placed) {
+            image.classList.add("placed");
+        }
+
         image.src = imageState.url;
         image._stateId = imageState.id || imageState.url;
         image._fileName = imageState.name || getImageDisplayName(imageState);
@@ -1087,7 +1163,128 @@
 
     // Selection is changed in several places; watching the selected class
     // keeps the Unlink button correct without touching all of them.
-    new MutationObserver(updateLinkButtons).observe(world, {
+    // ---- Placed ("set in place") images ----------------------------------
+    // A placed image has `placed: true` in its state. It ignores the mouse
+    // (see .image.placed), so it cannot be selected or dragged and shows no
+    // handles. The "Placed images" list is the only way to release it.
+
+    function getPlacedStates() {
+        return (roomState.images || []).filter(state => state.placed);
+    }
+
+    function renderPlacedList() {
+        placedPanel.replaceChildren();
+
+        const placed = getPlacedStates();
+
+        if (placed.length === 0) {
+            const empty = document.createElement("div");
+            empty.className = "placed-empty";
+            empty.textContent = "No placed images";
+            placedPanel.appendChild(empty);
+            return;
+        }
+
+        placed.forEach(state => {
+            const stateId = state.id || state.url;
+
+            const item = document.createElement("button");
+            item.className = "image-picker-item placed-item";
+            item.type = "button";
+            item.title = "Make this image selectable again";
+
+            const thumb = document.createElement("img");
+            thumb.className = "placed-thumb";
+            thumb.draggable = false;
+            thumb.src = state.url;
+
+            const label = document.createElement("span");
+            label.textContent = getImageDisplayName(state);
+
+            item.appendChild(thumb);
+            item.appendChild(label);
+
+            item.addEventListener("click", event => {
+                event.preventDefault();
+                event.stopPropagation();
+                releasePlacedImage(stateId);
+            });
+
+            placedPanel.appendChild(item);
+        });
+    }
+
+    function updatePlacedUi() {
+        const count = getPlacedStates().length;
+
+        placedButton.textContent = count > 0
+            ? "Placed images (" + count + ")"
+            : "Placed images";
+        placedButton.disabled = count === 0;
+
+        if (count === 0) {
+            placedPanel.style.display = "none";
+        } else if (placedPanel.style.display === "block") {
+            renderPlacedList();
+        }
+    }
+
+    async function releasePlacedImage(stateId) {
+        const state = roomState.images.find(other =>
+            (other.id || other.url) === stateId
+        );
+
+        if (!state) {
+            return;
+        }
+
+        delete state.placed;
+
+        const image = Array.from(world.querySelectorAll(".image")).find(other =>
+            other._stateId === stateId
+        );
+
+        if (image) {
+            image.classList.remove("placed");
+        }
+
+        updatePlacedUi();
+        await saveRoom();
+    }
+
+    placedButton.addEventListener("click", event => {
+        event.stopPropagation();
+
+        if (placedPanel.style.display === "block") {
+            placedPanel.style.display = "none";
+            return;
+        }
+
+        renderPlacedList();
+        placedPanel.style.display = "block";
+    });
+
+    // Let the list scroll instead of zooming the canvas.
+    placedPanel.addEventListener("wheel", event => {
+        event.stopPropagation();
+    });
+
+    document.addEventListener("mousedown", event => {
+        if (
+            placedPanel.style.display === "block" &&
+            !placedPanel.contains(event.target) &&
+            event.target !== placedButton
+        ) {
+            placedPanel.style.display = "none";
+        }
+    });
+
+    updatePlacedUi();
+
+    new MutationObserver(() => {
+        updateLinkButtons();
+        updatePlacedUi();
+    }).observe(world, {
         subtree: true,
         childList: true,
         attributes: true,
@@ -1254,14 +1451,14 @@
                 -deltaX * Math.sin(rotation) +
                 deltaY * Math.cos(rotation);
 
-            // Remember where linked partners started. Locked partners
-            // stay where they are (lock is unaffected by the link).
+            // Remember where linked partners started. Locked and placed
+            // partners stay where they are.
             dragStartLeft = left;
             dragStartTop = top;
             linkedStart = getLinkedImages(image)
                 .filter(other => {
                     const otherState = getImageState(other);
-                    return !(otherState && otherState.locked);
+                    return !(otherState && (otherState.locked || otherState.placed));
                 })
                 .map(other => ({
                     image: other,
@@ -1510,6 +1707,12 @@
         lockHandle.appendChild(layerUpButton);
         lockHandle.appendChild(layerDownButton);
 
+        const placeButton = document.createElement("button");
+        placeButton.className = "place-button";
+        placeButton.type = "button";
+        placeButton.textContent = "Set in place";
+        placeButton.title = "Turn this image into a fixed background image";
+
         const imageState = getImageState(image);
         const isLocked = imageState && imageState.locked;
         lockCheckbox.checked = !!isLocked;
@@ -1524,6 +1727,7 @@
         controls.appendChild(handle);
         controls.appendChild(rotateHandle);
         controls.appendChild(lockHandle);
+        controls.appendChild(placeButton);
         world.appendChild(controls);
 
         const updateHandle = () => {
@@ -1558,6 +1762,9 @@
             lockHandle.style.left = "-6px";
             lockHandle.style.top = "-32px";
 
+            placeButton.style.left = "-6px";
+            placeButton.style.top = "calc(100% + 12px)";
+
             const currentImageState = getImageState(image);
             const currentLocked = currentImageState && currentImageState.locked;
 
@@ -1571,6 +1778,33 @@
         lockHandle.addEventListener("mousedown", event => {
             event.preventDefault();
             event.stopPropagation();
+        });
+
+        placeButton.addEventListener("mousedown", event => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+
+        placeButton.addEventListener("click", async event => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const currentImageState = getImageState(image);
+
+            if (!currentImageState) {
+                return;
+            }
+
+            currentImageState.placed = true;
+
+            // Behave exactly as if the image had been deselected.
+            removeResizeHandle(image);
+            image.classList.remove("selected");
+            image.classList.add("placed");
+            updateNotes(image);
+            updatePlacedUi();
+
+            await saveRoom();
         });
 
         function moveLayer(direction) {
