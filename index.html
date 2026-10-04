@@ -280,6 +280,7 @@
     const wikiFrame = document.getElementById("wiki-frame");
 
     let wikiDirectoryHandle = null;
+    let wikiFiles = null;
     let wikiCurrentPath = "index.html";
 
     function normalizeWikiPath(path) {
@@ -317,9 +318,15 @@
     }
 
     async function getWikiFile(path) {
+        const normalizedPath = normalizeWikiPath(path);
+
+        if (wikiFiles) {
+            return wikiFiles.get(normalizedPath) || null;
+        }
+
         if (!wikiDirectoryHandle) return null;
 
-        const parts = normalizeWikiPath(path).split("/").filter(Boolean);
+        const parts = normalizedPath.split("/").filter(Boolean);
         let handle = wikiDirectoryHandle;
 
         try {
@@ -416,15 +423,65 @@
     }
 
     async function chooseWikiFolder() {
-        if (!window.showDirectoryPicker) {
-            alert("This browser does not support selecting a local folder.");
-            return;
-        }
-
         try {
-            wikiDirectoryHandle = await window.showDirectoryPicker({ mode: "read" });
+            if (window.showDirectoryPicker) {
+                wikiDirectoryHandle = await window.showDirectoryPicker({ mode: "read" });
+                wikiFiles = null;
+            } else {
+                const input = document.createElement("input");
+                input.type = "file";
+                input.multiple = true;
+                input.setAttribute("webkitdirectory", "");
+                input.setAttribute("directory", "");
+
+                await new Promise(resolve => {
+                    input.addEventListener("change", () => {
+                        const files = Array.from(input.files || []);
+                        if (!files.length) {
+                            resolve();
+                            return;
+                        }
+
+                        const firstPath = files[0].webkitRelativePath || files[0].name;
+                        const root = firstPath.includes("/")
+                            ? firstPath.split("/")[0] + "/"
+                            : "";
+
+                        wikiFiles = new Map();
+
+                        files.forEach(file => {
+                            const path = file.webkitRelativePath || file.name;
+                            wikiFiles.set(
+                                root && path.startsWith(root)
+                                    ? path.slice(root.length)
+                                    : path,
+                                file
+                            );
+                        });
+
+                        wikiDirectoryHandle = null;
+                        resolve();
+                    }, { once: true });
+
+                    input.click();
+                });
+            }
+
+            if (!wikiDirectoryHandle && !wikiFiles) {
+                return;
+            }
+
             wikiWindow.style.display = "block";
-            await loadWikiPage("index.html");
+
+            const files = wikiFiles
+                ? Array.from(wikiFiles.keys())
+                : [];
+
+            const startPage = files.includes("index.html")
+                ? "index.html"
+                : files.find(path => /\.html?$/i.test(path)) || "index.html";
+
+            await loadWikiPage(startPage);
         } catch (error) {
             if (error.name !== "AbortError") {
                 console.error("Failed to open wiki folder:", error);
