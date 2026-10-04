@@ -1096,13 +1096,30 @@
             const top = parseFloat(image.style.top) || 0;
             const width = parseFloat(image.style.width) || image.offsetWidth;
             const height = parseFloat(image.style.height) || image.offsetHeight;
-            const angle = image._rotation || 0;
+            const angle = (image._rotation || 0) * Math.PI / 180;
 
-            notesContainer.style.left = (left + width + 12) + "px";
-            notesContainer.style.top = top + "px";
+            const centerX = left + width / 2;
+            const centerY = top + height / 2;
+
+            // Attach the notes container to a fixed point in the image's
+            // local coordinate system: just outside the right edge, at
+            // the image's vertical center. Rotate that point with the image.
+            const localX = width / 2 + 12;
+            const localY = 0;
+            const anchorX =
+                centerX +
+                localX * Math.cos(angle) -
+                localY * Math.sin(angle);
+            const anchorY =
+                centerY +
+                localX * Math.sin(angle) +
+                localY * Math.cos(angle);
+
+            notesContainer.style.left = anchorX + "px";
+            notesContainer.style.top = anchorY + "px";
             notesContainer.style.width = Math.max(120, width * 0.5) + "px";
             notesContainer.style.height = Math.max(80, height * 0.5) + "px";
-            notesContainer.style.transform = "rotate(" + angle + "deg)";
+            notesContainer.style.transform = "rotate(" + (image._rotation || 0) + "deg)";
         };
 
         notesButton.addEventListener("mousedown", event => {
