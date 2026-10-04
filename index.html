@@ -1099,37 +1099,17 @@
 
     function makeDraggable(image) {
         let dragging = false;
+        let activeImage = null;
         let grabOffsetX = 0;
         let grabOffsetY = 0;
         let dragStartLeft = 0;
         let dragStartTop = 0;
         let linkedStart = [];
 
-        image.addEventListener("mousedown", event => {
-            // Middle mouse is reserved entirely for panning.
-            if (event.button === 1) {
-                return;
-            }
-
-            // Only the primary mouse button selects or drags images.
-            if (event.button !== 0) {
-                return;
-            }
-
-            // Shift+click adds/removes this image from the selection
-            // without deselecting the others, and never starts a drag.
-            if (event.shiftKey) {
-                event.preventDefault();
-
-                if (image.classList.contains("selected")) {
-                    removeResizeHandle(image);
-                    image.classList.remove("selected");
-                    updateNotes(image);
-                } else {
-                    image.classList.add("selected");
-                    addResizeHandle(image);
-                }
-
+        // A double-click selects an image. A single click no longer changes
+        // selection, so clicking through an overlap cannot steal selection.
+        image.addEventListener("dblclick", event => {
+            if (event.button !== 0 || event.shiftKey) {
                 return;
             }
 
@@ -1143,24 +1123,55 @@
 
             image.classList.add("selected");
             addResizeHandle(image);
+            event.preventDefault();
+        });
 
-            const imageState = getImageState(image);
+        image.addEventListener("mousedown", event => {
+            // Middle mouse is reserved entirely for panning.
+            if (event.button === 1) return;
+            if (event.button !== 0) return;
 
+            // Keep Shift+click multi-selection behavior.
+            if (event.shiftKey) {
+                event.preventDefault();
+
+                if (image.classList.contains("selected")) {
+                    removeResizeHandle(image);
+                    image.classList.remove("selected");
+                    updateNotes(image);
+                } else {
+                    image.classList.add("selected");
+                    addResizeHandle(image);
+                }
+                return;
+            }
+
+            // If a selected image is underneath the cursor, drag that image
+            // even when another image is visually on top of it.
+            const imagesAtCursor = document.elementsFromPoint(event.clientX, event.clientY)
+                .filter(element => element.classList && element.classList.contains("image"));
+            activeImage = imagesAtCursor.find(candidate =>
+                candidate.classList.contains("selected")
+            );
+
+            // Only an already-selected image can be dragged.
+            if (!activeImage) {
+                return;
+            }
+
+            const imageState = getImageState(activeImage);
             if (imageState && imageState.locked) {
-                dragging = false;
+                activeImage = null;
                 event.preventDefault();
                 return;
             }
 
-            const width = parseFloat(image.style.width) || image.offsetWidth;
-            const height = parseFloat(image.style.height) || image.offsetHeight;
-            const left = parseFloat(image.style.left) || 0;
-            const top = parseFloat(image.style.top) || 0;
-            const rotation = (image._rotation || 0) * Math.PI / 180;
+            const width = parseFloat(activeImage.style.width) || activeImage.offsetWidth;
+            const height = parseFloat(activeImage.style.height) || activeImage.offsetHeight;
+            const left = parseFloat(activeImage.style.left) || 0;
+            const top = parseFloat(activeImage.style.top) || 0;
+            const rotation = (activeImage._rotation || 0) * Math.PI / 180;
 
-            // Work from the image's center and convert the grabbed point
-            // into the image's local, unrotated coordinate system. This
-            // keeps the exact point under the mouse when the image is rotated.
             const centerX = left + width / 2;
             const centerY = top + height / 2;
             const mouseWorldX = screenToWorldX(event.clientX);
@@ -1175,11 +1186,9 @@
                 -deltaX * Math.sin(rotation) +
                 deltaY * Math.cos(rotation);
 
-            // Remember where linked partners started. Locked partners
-            // stay where they are (lock is unaffected by the link).
             dragStartLeft = left;
             dragStartTop = top;
-            linkedStart = getLinkedImages(image)
+            linkedStart = getLinkedImages(activeImage)
                 .filter(other => {
                     const otherState = getImageState(other);
                     return !(otherState && otherState.locked);
@@ -1195,18 +1204,15 @@
         });
 
         document.addEventListener("mousemove", event => {
-            if (!dragging) {
-                return;
-            }
+            if (!dragging || !activeImage) return;
 
-            const width = parseFloat(image.style.width) || image.offsetWidth;
-            const height = parseFloat(image.style.height) || image.offsetHeight;
-            const rotation = (image._rotation || 0) * Math.PI / 180;
+            const width = parseFloat(activeImage.style.width) || activeImage.offsetWidth;
+            const height = parseFloat(activeImage.style.height) || activeImage.offsetHeight;
+            const rotation = (activeImage._rotation || 0) * Math.PI / 180;
 
             const mouseWorldX = screenToWorldX(event.clientX);
             const mouseWorldY = screenToWorldY(event.clientY);
 
-            // Convert the local grab offset back into world coordinates.
             const worldOffsetX =
                 grabOffsetX * Math.cos(rotation) -
                 grabOffsetY * Math.sin(rotation);
@@ -1216,44 +1222,37 @@
 
             const centerX = mouseWorldX - worldOffsetX;
             const centerY = mouseWorldY - worldOffsetY;
-
             const newLeft = centerX - width / 2;
             const newTop = centerY - height / 2;
 
-            image.style.left = newLeft + "px";
-            image.style.top = newTop + "px";
+            activeImage.style.left = newLeft + "px";
+            activeImage.style.top = newTop + "px";
 
-            updateResizeHandle(image);
-            updateNotes(image);
+            updateResizeHandle(activeImage);
+            updateNotes(activeImage);
 
             const deltaLeft = newLeft - dragStartLeft;
             const deltaTop = newTop - dragStartTop;
 
             for (const item of linkedStart) {
-                if (!item.image.isConnected) {
-                    continue;
-                }
+                if (!item.image.isConnected) continue;
 
                 item.image.style.left = (item.left + deltaLeft) + "px";
                 item.image.style.top = (item.top + deltaTop) + "px";
-
                 updateResizeHandle(item.image);
                 updateNotes(item.image);
             }
         });
 
         document.addEventListener("mouseup", async () => {
-            if (!dragging) {
-                return;
-            }
+            if (!dragging || !activeImage) return;
 
             dragging = false;
+            const imageToSave = activeImage;
+            activeImage = null;
 
-            // Update the partners' state first; saveImagePosition then
-            // saves the whole room (including them) in one request.
             for (const item of linkedStart) {
                 const partnerState = getImageState(item.image);
-
                 if (partnerState) {
                     partnerState.left = parseFloat(item.image.style.left) || 0;
                     partnerState.top = parseFloat(item.image.style.top) || 0;
@@ -1261,10 +1260,9 @@
             }
 
             linkedStart = [];
-            await saveImagePosition(image);
+            await saveImagePosition(imageToSave);
         });
     }
-
     function addNotes(image) {
         removeNotes(image);
 
