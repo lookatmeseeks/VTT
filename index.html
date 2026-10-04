@@ -760,6 +760,7 @@
         }
 
         removeResizeHandle(selectedImage);
+        removeNotes(selectedImage);
         selectedImage.remove();
 
         roomState.images = roomState.images.filter(state =>
