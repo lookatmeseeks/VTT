@@ -181,6 +181,16 @@
             margin: 0;
             cursor: pointer;
         }
+
+        .layer-button {
+            padding: 2px 5px;
+            border: 1px solid black;
+            background: white;
+            color: black;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 18px;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -803,8 +813,22 @@
         const lockText = document.createElement("span");
         lockText.textContent = "Lock";
 
+        const layerUpButton = document.createElement("button");
+        layerUpButton.className = "layer-button";
+        layerUpButton.type = "button";
+        layerUpButton.textContent = "↑";
+        layerUpButton.title = "Move image one layer up";
+
+        const layerDownButton = document.createElement("button");
+        layerDownButton.className = "layer-button";
+        layerDownButton.type = "button";
+        layerDownButton.textContent = "↓";
+        layerDownButton.title = "Move image one layer down";
+
         lockHandle.appendChild(lockCheckbox);
         lockHandle.appendChild(lockText);
+        lockHandle.appendChild(layerUpButton);
+        lockHandle.appendChild(layerDownButton);
 
         const imageState = getImageState(image);
         const isLocked = imageState && imageState.locked;
@@ -864,6 +888,75 @@
         lockHandle.addEventListener("mousedown", event => {
             event.preventDefault();
             event.stopPropagation();
+        });
+
+        function moveLayer(direction) {
+            const currentIndex = roomState.images.findIndex(state =>
+                (state.id || state.url) === image._stateId
+            );
+
+            if (currentIndex < 0) {
+                return;
+            }
+
+            const targetIndex = currentIndex + direction;
+
+            if (targetIndex < 0 || targetIndex >= roomState.images.length) {
+                return;
+            }
+
+            const temp = roomState.images[currentIndex];
+            roomState.images[currentIndex] = roomState.images[targetIndex];
+            roomState.images[targetIndex] = temp;
+
+            const targetImage = Array.from(world.querySelectorAll(".image")).find(other =>
+                other._stateId === roomState.images[targetIndex]._stateId
+            );
+
+            if (direction > 0) {
+                world.appendChild(image);
+            } else {
+                const images = Array.from(world.querySelectorAll(".image"));
+                const targetElement = images.find(other =>
+                    other._stateId === roomState.images[targetIndex]._stateId
+                );
+
+                if (targetElement) {
+                    world.insertBefore(image, targetElement);
+                }
+            }
+
+            // Keep controls and notes above the images while changing only image order.
+            if (image._controlsContainer) {
+                world.appendChild(image._controlsContainer);
+            }
+            if (image._notesContainer) {
+                world.appendChild(image._notesContainer);
+            }
+
+            saveRoom();
+        }
+
+        layerUpButton.addEventListener("mousedown", event => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+
+        layerDownButton.addEventListener("mousedown", event => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+
+        layerUpButton.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            moveLayer(1);
+        });
+
+        layerDownButton.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            moveLayer(-1);
         });
 
         lockCheckbox.addEventListener("change", async event => {
