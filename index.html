@@ -1115,10 +1115,15 @@
                 localX * Math.sin(angle) +
                 localY * Math.cos(angle);
 
+            const notesWidth = Math.max(120, width * 0.5);
+            const notesHeight = Math.max(80, height * 0.5);
+
             notesContainer.style.left = anchorX + "px";
-            notesContainer.style.top = anchorY + "px";
-            notesContainer.style.width = Math.max(120, width * 0.5) + "px";
-            notesContainer.style.height = Math.max(80, height * 0.5) + "px";
+            // The notes container rotates around its left-center point.
+            // Keep that rotation origin exactly on the image anchor.
+            notesContainer.style.top = (anchorY - notesHeight / 2) + "px";
+            notesContainer.style.width = notesWidth + "px";
+            notesContainer.style.height = notesHeight + "px";
             notesContainer.style.transform = "rotate(" + (image._rotation || 0) + "deg)";
         };
 
