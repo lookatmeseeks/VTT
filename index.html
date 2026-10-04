@@ -191,6 +191,61 @@
             font-size: 16px;
             line-height: 18px;
         }
+
+        #wiki-button {
+            position: absolute;
+            top: 10px;
+            left: 125px;
+            z-index: 100000;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        .wiki-window {
+            position: fixed;
+            display: none;
+            left: 15vw;
+            top: 10vh;
+            width: 70vw;
+            height: 75vh;
+            min-width: 350px;
+            min-height: 250px;
+            z-index: 100002;
+            background: #222;
+            border: 1px solid #777;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+            resize: both;
+            overflow: hidden;
+        }
+
+        .wiki-titlebar {
+            height: 36px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 8px;
+            box-sizing: border-box;
+            background: #181818;
+            color: white;
+            cursor: move;
+            user-select: none;
+        }
+
+        .wiki-title {
+            flex: 1;
+        }
+
+        .wiki-button-small {
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+
+        .wiki-frame {
+            width: 100%;
+            height: calc(100% - 36px);
+            border: 0;
+            background: white;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -200,6 +255,15 @@
 <div id="canvas">
     <div id="world"></div>
     <button id="delete-button">Delete selected</button>
+    <button id="wiki-button">Wiki</button>
+    <div id="wiki-window" class="wiki-window">
+        <div id="wiki-titlebar" class="wiki-titlebar">
+            <span class="wiki-title">Local Wiki</span>
+            <button id="wiki-open" class="wiki-button-small">Choose wiki folder</button>
+            <button id="wiki-close" class="wiki-button-small">Close</button>
+        </div>
+        <iframe id="wiki-frame" class="wiki-frame"></iframe>
+    </div>
     <div id="image-picker" class="image-picker"></div>
 </div>
 
@@ -208,6 +272,206 @@
     const world = document.getElementById("world");
     const deleteButton = document.getElementById("delete-button");
     const imagePicker = document.getElementById("image-picker");
+    const wikiButton = document.getElementById("wiki-button");
+    const wikiWindow = document.getElementById("wiki-window");
+    const wikiTitlebar = document.getElementById("wiki-titlebar");
+    const wikiOpenButton = document.getElementById("wiki-open");
+    const wikiCloseButton = document.getElementById("wiki-close");
+    const wikiFrame = document.getElementById("wiki-frame");
+
+    let wikiDirectoryHandle = null;
+    let wikiCurrentPath = "index.html";
+
+    function normalizeWikiPath(path) {
+        const parts = path.split("/");
+        const result = [];
+
+        for (const part of parts) {
+            if (!part || part === ".") continue;
+            if (part === "..") result.pop();
+            else result.push(part);
+        }
+
+        return result.join("/");
+    }
+
+    function resolveWikiPath(basePath, relativePath) {
+        try {
+            const clean = relativePath.split("#")[0].split("?")[0];
+            if (!clean) return basePath;
+
+            if (/^(https?:|data:|blob:|mailto:|javascript:)/i.test(clean)) {
+                return null;
+            }
+
+            if (clean.startsWith("/")) {
+                return normalizeWikiPath(clean.slice(1));
+            }
+
+            const baseParts = basePath.split("/");
+            baseParts.pop();
+            return normalizeWikiPath(baseParts.concat(clean.split("/")).join("/"));
+        } catch {
+            return null;
+        }
+    }
+
+    async function getWikiFile(path) {
+        if (!wikiDirectoryHandle) return null;
+
+        const parts = normalizeWikiPath(path).split("/").filter(Boolean);
+        let handle = wikiDirectoryHandle;
+
+        try {
+            for (let i = 0; i < parts.length; i++) {
+                if (i === parts.length - 1) {
+                    handle = await handle.getFileHandle(parts[i]);
+                } else {
+                    handle = await handle.getDirectoryHandle(parts[i]);
+                }
+            }
+
+            return await handle.getFile();
+        } catch {
+            return null;
+        }
+    }
+
+    async function makeWikiResourceUrl(path, cache) {
+        const normalized = normalizeWikiPath(path);
+        if (cache.has(normalized)) return cache.get(normalized);
+
+        const file = await getWikiFile(normalized);
+        if (!file) return null;
+
+        const url = URL.createObjectURL(file);
+        cache.set(normalized, url);
+        return url;
+    }
+
+    async function loadWikiPage(path) {
+        const file = await getWikiFile(path);
+        if (!file) {
+            wikiFrame.srcdoc =
+                "<p style='font-family:sans-serif;padding:20px'>Could not find <b>" +
+                path.replace(/</g, "&lt;") +
+                "</b> in the selected wiki folder.</p>";
+            return;
+        }
+
+        const html = await file.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        const resourceCache = new Map();
+
+        const elements = doc.querySelectorAll("[src], [href]");
+        for (const element of elements) {
+            const attribute = element.hasAttribute("src") ? "src" : "href";
+            const value = element.getAttribute(attribute);
+
+            if (!value || value.startsWith("#")) continue;
+
+            const resolved = resolveWikiPath(path, value);
+            if (!resolved) continue;
+
+            const lower = resolved.toLowerCase();
+
+            if (element.tagName === "A") {
+                if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+                    element.setAttribute("data-wiki-path", resolved);
+                    element.setAttribute("href", "#");
+                }
+                continue;
+            }
+
+            const url = await makeWikiResourceUrl(resolved, resourceCache);
+            if (url) {
+                element.setAttribute(attribute, url);
+            }
+        }
+
+        doc.querySelectorAll("style").forEach(style => {
+            style.textContent = style.textContent.replace(
+                /url\((['"]?)([^'")]+)\1\)/gi,
+                "url($1$2$1)"
+            );
+        });
+
+        const injected = doc.createElement("script");
+        injected.textContent = `
+            document.addEventListener("click", event => {
+                const link = event.target.closest("a[data-wiki-path]");
+                if (!link) return;
+                event.preventDefault();
+                parent.postMessage({
+                    type: "local-wiki-link",
+                    path: link.getAttribute("data-wiki-path")
+                }, "*");
+            });
+        `;
+        doc.body.appendChild(injected);
+
+        wikiCurrentPath = path;
+        wikiFrame.srcdoc = "<!DOCTYPE html>" + doc.documentElement.outerHTML;
+    }
+
+    async function chooseWikiFolder() {
+        if (!window.showDirectoryPicker) {
+            alert("This browser does not support selecting a local folder.");
+            return;
+        }
+
+        try {
+            wikiDirectoryHandle = await window.showDirectoryPicker({ mode: "read" });
+            wikiWindow.style.display = "block";
+            await loadWikiPage("index.html");
+        } catch (error) {
+            if (error.name !== "AbortError") {
+                console.error("Failed to open wiki folder:", error);
+                alert("Could not open that folder.");
+            }
+        }
+    }
+
+    wikiButton.addEventListener("click", () => {
+        wikiWindow.style.display = "block";
+    });
+
+    wikiOpenButton.addEventListener("click", chooseWikiFolder);
+
+    wikiCloseButton.addEventListener("click", () => {
+        wikiWindow.style.display = "none";
+    });
+
+    window.addEventListener("message", event => {
+        if (!event.data || event.data.type !== "local-wiki-link") return;
+        loadWikiPage(event.data.path);
+    });
+
+    let wikiDragging = false;
+    let wikiDragOffsetX = 0;
+    let wikiDragOffsetY = 0;
+
+    wikiTitlebar.addEventListener("mousedown", event => {
+        if (event.target.closest("button")) return;
+
+        wikiDragging = true;
+        const rect = wikiWindow.getBoundingClientRect();
+        wikiDragOffsetX = event.clientX - rect.left;
+        wikiDragOffsetY = event.clientY - rect.top;
+        event.preventDefault();
+    });
+
+    document.addEventListener("mousemove", event => {
+        if (!wikiDragging) return;
+
+        wikiWindow.style.left = (event.clientX - wikiDragOffsetX) + "px";
+        wikiWindow.style.top = (event.clientY - wikiDragOffsetY) + "px";
+    });
+
+    document.addEventListener("mouseup", () => {
+        wikiDragging = false;
+    });
 
     let viewX = 0;
     let viewY = 0;
