@@ -1232,16 +1232,19 @@
             controls.style.height = height + "px";
             controls.style.transform = "rotate(" + angle + "deg)";
 
-            handle.style.right = (-9 / zoom) + "px";
-            handle.style.bottom = (-9 / zoom) + "px";
+            // The controls live inside #world, so they already inherit
+            // the world's pan/zoom transform. Their offsets therefore stay
+            // in world units and must not be divided by zoom.
+            handle.style.right = "-9px";
+            handle.style.bottom = "-9px";
 
             rotateHandle.style.left = "50%";
-            rotateHandle.style.top = (-32 / zoom) + "px";
+            rotateHandle.style.top = "-32px";
             rotateHandle.style.transform = "translateX(-50%)";
 
             lockHandle.style.right = "auto";
-            lockHandle.style.left = (-6 / zoom) + "px";
-            lockHandle.style.top = (-32 / zoom) + "px";
+            lockHandle.style.left = "-6px";
+            lockHandle.style.top = "-32px";
 
             const currentImageState = getImageState(image);
             const currentLocked = currentImageState && currentImageState.locked;
