@@ -182,6 +182,32 @@
             cursor: pointer;
         }
 
+        .initiative-handle {
+            position: absolute;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 5px 2px 2px;
+            border: 1px solid black;
+            background: white;
+            box-sizing: border-box;
+            cursor: pointer;
+            z-index: 99999;
+            color: black;
+            font-size: 14px;
+            line-height: 18px;
+        }
+
+        .initiative-handle input {
+            width: 42px;
+            box-sizing: border-box;
+            margin: 0;
+        }
+
+        .initiative-handle span {
+            font-size: 14px;
+        }
+
         .layer-button {
             padding: 2px 5px;
             border: 1px solid black;
@@ -243,6 +269,40 @@
             z-index: 100000;
             padding: 8px 12px;
             cursor: pointer;
+        }
+
+        #turn-order {
+            position: absolute;
+            top: 0;
+            left: 250px;
+            right: 10px;
+            min-height: 58px;
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            z-index: 99999;
+            pointer-events: none;
+            overflow-x: auto;
+            padding: 4px 0;
+            box-sizing: border-box;
+        }
+
+        .turn-order-item {
+            width: 54px;
+            height: 54px;
+            flex: 0 0 54px;
+            box-sizing: border-box;
+            padding: 3px;
+            background: #222;
+            border: 1px solid #777;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+        }
+
+        .turn-order-item img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
         }
 
         .dice-panel {
@@ -460,6 +520,7 @@
     <button id="link-button" title="Select 2 or more images (hold Shift), then click Link">Link</button>
     <button id="unlink-button" title="Remove the selected image(s) from their link" disabled>Unlink</button>
     <button id="placed-button" title="Images that were set in place" disabled>Placed images</button>
+    <div id="turn-order"></div>
     <div id="placed-panel" class="placed-panel"></div>
     <div id="dice-panel" class="dice-panel">
         <div id="dice-titlebar" class="dice-titlebar">
@@ -510,6 +571,7 @@
     const diceRollButton = document.getElementById("dice-roll-button");
     const diceClearButton = document.getElementById("dice-clear-button");
     const diceResult = document.getElementById("dice-result");
+    const turnOrder = document.getElementById("turn-order");
 
     // Handles and notes scale with the image: factor = current width divided
     // by the image's original (natural) width, limited to this range so the
@@ -914,6 +976,36 @@
         }
     }
 
+    function renderTurnOrder() {
+        turnOrder.replaceChildren();
+
+        const initiativeImages = (roomState.images || [])
+            .map((imageState, index) => ({ imageState, index }))
+            .filter(entry => Number.isFinite(Number(entry.imageState.initiative)))
+            .sort((a, b) => {
+                const difference =
+                    Number(b.imageState.initiative) - Number(a.imageState.initiative);
+
+                return difference || a.index - b.index;
+            });
+
+        for (const { imageState } of initiativeImages) {
+            const item = document.createElement("div");
+            item.className = "turn-order-item";
+            item.title =
+                getImageDisplayName(imageState) +
+                " — Initiative " +
+                imageState.initiative;
+
+            const image = document.createElement("img");
+            image.src = imageState.url;
+            image.alt = getImageDisplayName(imageState);
+
+            item.appendChild(image);
+            turnOrder.appendChild(item);
+        }
+    }
+
     function renderRoomState() {
         document.querySelectorAll(".image").forEach(image => {
             removeResizeHandle(image);
@@ -926,6 +1018,7 @@
         }
 
         updateImageLayers();
+        renderTurnOrder();
         renderDiceResult();
     }
 
@@ -1944,6 +2037,21 @@
         const lockHandle = document.createElement("label");
         lockHandle.className = "lock-handle";
 
+        const initiativeHandle = document.createElement("label");
+        initiativeHandle.className = "initiative-handle";
+
+        const initiativeInput = document.createElement("input");
+        initiativeInput.type = "number";
+        initiativeInput.step = "1";
+        initiativeInput.placeholder = "—";
+        initiativeInput.title = "Initiative";
+
+        const initiativeText = document.createElement("span");
+        initiativeText.textContent = "Ini";
+
+        initiativeHandle.appendChild(initiativeInput);
+        initiativeHandle.appendChild(initiativeText);
+
         const lockCheckbox = document.createElement("input");
         lockCheckbox.type = "checkbox";
 
@@ -1977,6 +2085,10 @@
         const isLocked = imageState && imageState.locked;
         lockCheckbox.checked = !!isLocked;
 
+        if (imageState && Number.isFinite(Number(imageState.initiative))) {
+            initiativeInput.value = imageState.initiative;
+        }
+
         handle.style.display = isLocked ? "none" : "block";
         rotateHandle.style.display = isLocked ? "none" : "block";
         lockCheckbox.checked = !!isLocked;
@@ -1987,6 +2099,7 @@
         controls.appendChild(handle);
         controls.appendChild(rotateHandle);
         controls.appendChild(lockHandle);
+        controls.appendChild(initiativeHandle);
         controls.appendChild(placeButton);
         world.appendChild(controls);
 
@@ -2024,6 +2137,9 @@
             lockHandle.style.left = "-6px";
             lockHandle.style.top = "-32px";
 
+            initiativeHandle.style.left = "-6px";
+            initiativeHandle.style.top = "-62px";
+
             placeButton.style.left = "-6px";
             placeButton.style.top = "calc(100% + 12px)";
 
@@ -2042,6 +2158,9 @@
             lockHandle.style.transformOrigin = "6px 32px";
             lockHandle.style.transform = scaleText;
 
+            initiativeHandle.style.transformOrigin = "6px 62px";
+            initiativeHandle.style.transform = scaleText;
+
             placeButton.style.transformOrigin = "6px -12px";
             placeButton.style.transform = scaleText;
 
@@ -2058,6 +2177,42 @@
         lockHandle.addEventListener("mousedown", event => {
             event.preventDefault();
             event.stopPropagation();
+        });
+
+        initiativeHandle.addEventListener("mousedown", event => {
+            event.stopPropagation();
+        });
+
+        initiativeInput.addEventListener("click", event => {
+            event.stopPropagation();
+        });
+
+        initiativeInput.addEventListener("change", async event => {
+            event.stopPropagation();
+
+            const currentImageState = getImageState(image);
+
+            if (!currentImageState) {
+                return;
+            }
+
+            const value = initiativeInput.value.trim();
+
+            if (value === "") {
+                delete currentImageState.initiative;
+            } else {
+                const initiative = Number(value);
+
+                if (!Number.isFinite(initiative)) {
+                    initiativeInput.value = "";
+                    delete currentImageState.initiative;
+                } else {
+                    currentImageState.initiative = initiative;
+                }
+            }
+
+            renderTurnOrder();
+            await saveRoom();
         });
 
         placeButton.addEventListener("mousedown", event => {
@@ -2269,6 +2424,7 @@
         image._resizeHandle = handle;
         image._rotateHandle = rotateHandle;
         image._lockHandle = lockHandle;
+        image._initiativeHandle = initiativeHandle;
         image._controlsContainer = controls;
         image._updateResizeHandle = updateHandle;
 
@@ -2294,6 +2450,10 @@
 
         if (image._lockHandle) {
             image._lockHandle = null;
+        }
+
+        if (image._initiativeHandle) {
+            image._initiativeHandle = null;
         }
 
         if (image._controlsContainer) {
