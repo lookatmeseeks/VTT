@@ -290,24 +290,22 @@
             z-index: 99999;
         }
 
-        .wiki-window {
+        /* ---- Floating character sheet window ("Wiki" button) ---- */
+        .sheet-window {
             position: fixed;
             display: none;
-            left: 15vw;
-            top: 10vh;
-            width: 70vw;
-            height: 75vh;
-            min-width: 350px;
-            min-height: 250px;
+            left: 10vw;
+            top: 8vh;
+            width: 60vw;
+            height: 80vh;
             z-index: 100002;
             background: #222;
             border: 1px solid #777;
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
-            resize: both;
             overflow: hidden;
         }
 
-        .wiki-titlebar {
+        .sheet-titlebar {
             height: 36px;
             display: flex;
             align-items: center;
@@ -320,20 +318,30 @@
             user-select: none;
         }
 
-        .wiki-title {
+        .sheet-title {
             flex: 1;
         }
 
-        .wiki-button-small {
+        .sheet-close {
             padding: 4px 8px;
             cursor: pointer;
         }
 
-        .wiki-frame {
+        .sheet-frame {
             width: 100%;
             height: calc(100% - 36px);
             border: 0;
             background: white;
+        }
+
+        .sheet-resize {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            width: 18px;
+            height: 18px;
+            cursor: nwse-resize;
+            background: linear-gradient(135deg, transparent 50%, #aaa 50%);
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -349,15 +357,16 @@
     <button id="unlink-button" title="Remove the selected image(s) from their link" disabled>Unlink</button>
     <button id="placed-button" title="Images that were set in place" disabled>Placed images</button>
     <div id="placed-panel" class="placed-panel"></div>
-    <div id="wiki-window" class="wiki-window">
-        <div id="wiki-titlebar" class="wiki-titlebar">
-            <span class="wiki-title">Local Wiki</span>
-            <button id="wiki-open" class="wiki-button-small">Choose wiki folder</button>
-            <button id="wiki-close" class="wiki-button-small">Close</button>
-        </div>
-        <iframe id="wiki-frame" class="wiki-frame"></iframe>
-    </div>
     <div id="image-picker" class="image-picker"></div>
+</div>
+
+<div id="sheet-window" class="sheet-window">
+    <div id="sheet-titlebar" class="sheet-titlebar">
+        <span class="sheet-title">Wiki</span>
+        <button id="sheet-close" class="sheet-close">Close</button>
+    </div>
+    <iframe id="sheet-frame" class="sheet-frame"></iframe>
+    <div id="sheet-resize" class="sheet-resize"></div>
 </div>
 
 <script>
@@ -386,261 +395,81 @@
 
         return Math.min(UI_SCALE_MAX, Math.max(UI_SCALE_MIN, width / naturalWidth));
     }
-    const wikiWindow = document.getElementById("wiki-window");
-    const wikiTitlebar = document.getElementById("wiki-titlebar");
-    const wikiOpenButton = document.getElementById("wiki-open");
-    const wikiCloseButton = document.getElementById("wiki-close");
-    const wikiFrame = document.getElementById("wiki-frame");
 
-    let wikiDirectoryHandle = null;
-    let wikiFiles = null;
-    let wikiCurrentPath = "index.html";
+    // ---- Floating wiki / character sheet window ---------------------------
+    // Shows the exported page (StarteMich.html, same folder as this page)
+    // in a draggable, resizable window. The page is loaded once, the first
+    // time the window opens; closing only hides it, so scroll position and
+    // typed notes survive.
 
-    function normalizeWikiPath(path) {
-        const parts = path.split("/");
-        const result = [];
+    const SHEET_URL = "StarteMich.html";
 
-        for (const part of parts) {
-            if (!part || part === ".") continue;
-            if (part === "..") result.pop();
-            else result.push(part);
-        }
+    const sheetWindow = document.getElementById("sheet-window");
+    const sheetTitlebar = document.getElementById("sheet-titlebar");
+    const sheetFrame = document.getElementById("sheet-frame");
+    const sheetClose = document.getElementById("sheet-close");
+    const sheetResize = document.getElementById("sheet-resize");
 
-        return result.join("/");
-    }
-
-    function resolveWikiPath(basePath, relativePath) {
-        try {
-            const clean = relativePath.split("#")[0].split("?")[0];
-            if (!clean) return basePath;
-
-            if (/^(https?:|data:|blob:|mailto:|javascript:)/i.test(clean)) {
-                return null;
-            }
-
-            if (clean.startsWith("/")) {
-                return normalizeWikiPath(clean.slice(1));
-            }
-
-            const baseParts = basePath.split("/");
-            baseParts.pop();
-            return normalizeWikiPath(baseParts.concat(clean.split("/")).join("/"));
-        } catch {
-            return null;
-        }
-    }
-
-    async function getWikiFile(path) {
-        const normalizedPath = normalizeWikiPath(path);
-
-        if (wikiFiles) {
-            return wikiFiles.get(normalizedPath) || null;
-        }
-
-        if (!wikiDirectoryHandle) return null;
-
-        const parts = normalizedPath.split("/").filter(Boolean);
-        let handle = wikiDirectoryHandle;
-
-        try {
-            for (let i = 0; i < parts.length; i++) {
-                if (i === parts.length - 1) {
-                    handle = await handle.getFileHandle(parts[i]);
-                } else {
-                    handle = await handle.getDirectoryHandle(parts[i]);
-                }
-            }
-
-            return await handle.getFile();
-        } catch {
-            return null;
-        }
-    }
-
-    async function makeWikiResourceUrl(path, cache) {
-        const normalized = normalizeWikiPath(path);
-        if (cache.has(normalized)) return cache.get(normalized);
-
-        const file = await getWikiFile(normalized);
-        if (!file) return null;
-
-        const url = URL.createObjectURL(file);
-        cache.set(normalized, url);
-        return url;
-    }
-
-    async function loadWikiPage(path) {
-        const file = await getWikiFile(path);
-        if (!file) {
-            wikiFrame.srcdoc =
-                "<p style='font-family:sans-serif;padding:20px'>Could not find <b>" +
-                path.replace(/</g, "&lt;") +
-                "</b> in the selected wiki folder.</p>";
+    wikiButton.addEventListener("click", () => {
+        if (sheetWindow.style.display === "block") {
+            sheetWindow.style.display = "none";
             return;
         }
 
-        const html = await file.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, "text/html");
-        const resourceCache = new Map();
-
-        const elements = doc.querySelectorAll("[src], [href]");
-        for (const element of elements) {
-            const attribute = element.hasAttribute("src") ? "src" : "href";
-            const value = element.getAttribute(attribute);
-
-            if (!value || value.startsWith("#")) continue;
-
-            const resolved = resolveWikiPath(path, value);
-            if (!resolved) continue;
-
-            const lower = resolved.toLowerCase();
-
-            if (element.tagName === "A") {
-                if (lower.endsWith(".html") || lower.endsWith(".htm")) {
-                    element.setAttribute("data-wiki-path", resolved);
-                    element.setAttribute("href", "#");
-                }
-                continue;
-            }
-
-            const url = await makeWikiResourceUrl(resolved, resourceCache);
-            if (url) {
-                element.setAttribute(attribute, url);
-            }
+        if (!sheetFrame.getAttribute("src")) {
+            sheetFrame.src = SHEET_URL;
         }
 
-        doc.querySelectorAll("style").forEach(style => {
-            style.textContent = style.textContent.replace(
-                /url\((['"]?)([^'")]+)\1\)/gi,
-                "url($1$2$1)"
-            );
-        });
-
-        const injected = doc.createElement("script");
-        injected.textContent = `
-            document.addEventListener("click", event => {
-                const link = event.target.closest("a[data-wiki-path]");
-                if (!link) return;
-                event.preventDefault();
-                parent.postMessage({
-                    type: "local-wiki-link",
-                    path: link.getAttribute("data-wiki-path")
-                }, "*");
-            });
-        `;
-        doc.body.appendChild(injected);
-
-        wikiCurrentPath = path;
-        wikiFrame.srcdoc = "<!DOCTYPE html>" + doc.documentElement.outerHTML;
-    }
-
-    async function chooseWikiFolder() {
-        try {
-            if (window.showDirectoryPicker) {
-                wikiDirectoryHandle = await window.showDirectoryPicker({ mode: "read" });
-                wikiFiles = null;
-            } else {
-                const input = document.createElement("input");
-                input.type = "file";
-                input.multiple = true;
-                input.setAttribute("webkitdirectory", "");
-                input.setAttribute("directory", "");
-
-                await new Promise(resolve => {
-                    input.addEventListener("change", () => {
-                        const files = Array.from(input.files || []);
-                        if (!files.length) {
-                            resolve();
-                            return;
-                        }
-
-                        const firstPath = files[0].webkitRelativePath || files[0].name;
-                        const root = firstPath.includes("/")
-                            ? firstPath.split("/")[0] + "/"
-                            : "";
-
-                        wikiFiles = new Map();
-
-                        files.forEach(file => {
-                            const path = file.webkitRelativePath || file.name;
-                            wikiFiles.set(
-                                root && path.startsWith(root)
-                                    ? path.slice(root.length)
-                                    : path,
-                                file
-                            );
-                        });
-
-                        wikiDirectoryHandle = null;
-                        resolve();
-                    }, { once: true });
-
-                    input.click();
-                });
-            }
-
-            if (!wikiDirectoryHandle && !wikiFiles) {
-                return;
-            }
-
-            wikiWindow.style.display = "block";
-
-            const files = wikiFiles
-                ? Array.from(wikiFiles.keys())
-                : [];
-
-            const startPage = files.includes("index.html")
-                ? "index.html"
-                : files.find(path => /\.html?$/i.test(path)) || "index.html";
-
-            await loadWikiPage(startPage);
-        } catch (error) {
-            if (error.name !== "AbortError") {
-                console.error("Failed to open wiki folder:", error);
-                alert("Could not open that folder.");
-            }
-        }
-    }
-
-    wikiButton.addEventListener("click", () => {
-        wikiWindow.style.display = "block";
+        sheetWindow.style.display = "block";
     });
 
-    wikiOpenButton.addEventListener("click", chooseWikiFolder);
-
-    wikiCloseButton.addEventListener("click", () => {
-        wikiWindow.style.display = "none";
+    sheetClose.addEventListener("click", () => {
+        sheetWindow.style.display = "none";
     });
 
-    window.addEventListener("message", event => {
-        if (!event.data || event.data.type !== "local-wiki-link") return;
-        loadWikiPage(event.data.path);
-    });
+    // While dragging or resizing, the iframe must not receive mouse events,
+    // otherwise it swallows them as soon as the cursor passes over it.
+    let sheetAction = null;
 
-    let wikiDragging = false;
-    let wikiDragOffsetX = 0;
-    let wikiDragOffsetY = 0;
-
-    wikiTitlebar.addEventListener("mousedown", event => {
+    sheetTitlebar.addEventListener("mousedown", event => {
         if (event.target.closest("button")) return;
 
-        wikiDragging = true;
-        const rect = wikiWindow.getBoundingClientRect();
-        wikiDragOffsetX = event.clientX - rect.left;
-        wikiDragOffsetY = event.clientY - rect.top;
+        const rect = sheetWindow.getBoundingClientRect();
+        sheetAction = {
+            type: "move",
+            offsetX: event.clientX - rect.left,
+            offsetY: event.clientY - rect.top
+        };
+        sheetFrame.style.pointerEvents = "none";
+        event.preventDefault();
+    });
+
+    sheetResize.addEventListener("mousedown", event => {
+        const rect = sheetWindow.getBoundingClientRect();
+        sheetAction = {
+            type: "resize",
+            left: rect.left,
+            top: rect.top
+        };
+        sheetFrame.style.pointerEvents = "none";
         event.preventDefault();
     });
 
     document.addEventListener("mousemove", event => {
-        if (!wikiDragging) return;
+        if (!sheetAction) return;
 
-        wikiWindow.style.left = (event.clientX - wikiDragOffsetX) + "px";
-        wikiWindow.style.top = (event.clientY - wikiDragOffsetY) + "px";
+        if (sheetAction.type === "move") {
+            sheetWindow.style.left = (event.clientX - sheetAction.offsetX) + "px";
+            sheetWindow.style.top = (event.clientY - sheetAction.offsetY) + "px";
+        } else {
+            sheetWindow.style.width = Math.max(300, event.clientX - sheetAction.left) + "px";
+            sheetWindow.style.height = Math.max(200, event.clientY - sheetAction.top) + "px";
+        }
     });
 
     document.addEventListener("mouseup", () => {
-        wikiDragging = false;
+        sheetAction = null;
+        sheetFrame.style.pointerEvents = "";
     });
 
     let viewX = 0;
@@ -1364,7 +1193,7 @@
         }
 
         // Only react to the canvas itself and things inside the world
-        // (images). Buttons, the wiki window and the picker are not.
+        // (images). Buttons and the picker are not.
         if (event.target !== canvas && !world.contains(event.target)) {
             return;
         }
