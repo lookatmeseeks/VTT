@@ -1,0 +1,202 @@
+<style>
+#vt-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 320px;
+  height: 100vh;
+  background: #1e1e1e;
+  color: white;
+  z-index: 9999;
+
+  display: flex;
+  flex-direction: column;
+
+  --notes-h: 50%;
+  border-left: 1px solid #444;
+}
+
+/* WIDTH RESIZE HANDLE */
+#vt-resize-handle-x {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: ew-resize;
+  z-index: 9999;
+}
+
+/* NOTES */
+#vt-notes {
+  height: var(--notes-h);
+  min-height: 100px;
+  overflow: hidden;
+}
+
+/* DIVIDER */
+#vt-resize-handle-y {
+  height: 10px;
+  cursor: ns-resize;
+  background: #555;
+  z-index: 9999;
+}
+
+/* DICE */
+#vt-dice {
+  flex: 1;
+  min-height: 120px;
+  border-top: 1px solid #444;
+  display: flex;
+  flex-direction: column;
+}
+
+/* TEXTAREA */
+#vt-notes textarea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  background: #111;
+  color: white;
+  border: none;
+  outline: none;
+  padding: 5px;
+}
+
+/* DICE UI */
+.dice-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 5px;
+  padding: 10px;
+}
+
+.dice-buttons button {
+  background: #333;
+  color: white;
+  border: 1px solid #555;
+  padding: 6px;
+  cursor: pointer;
+}
+
+#dice-result {
+  padding: 10px;
+}
+
+#dice-history {
+  padding: 10px;
+  font-size: 13px;
+}
+</style>
+
+<div id="vt-sidebar">
+
+  <div id="vt-resize-handle-x"></div>
+
+  <div id="vt-notes">
+    <textarea data-char="note"></textarea>
+  </div>
+
+  <div id="vt-resize-handle-y"></div>
+
+  <div id="vt-dice">
+
+    <div class="dice-buttons">
+      <button onclick="roll(4)">W4</button>
+      <button onclick="roll(6)">W6</button>
+      <button onclick="roll(8)">W8</button>
+      <button onclick="roll(10)">W10</button>
+      <button onclick="roll(12)">W12</button>
+      <button onclick="roll(20)">W20</button>
+    </div>
+
+    <div id="dice-result">Wurf: -</div>
+    <div id="dice-history"></div>
+
+  </div>
+
+</div>
+
+<script>
+window.addEventListener("load", () => {
+
+  /* NOTES SAVE */
+  const note = document.querySelector("[data-char='note']");
+  const noteKey = "vt_note";
+
+  if (note) {
+    note.value = localStorage.getItem(noteKey) || "";
+
+    note.addEventListener("input", () => {
+      localStorage.setItem(noteKey, note.value);
+    });
+  }
+
+  const sidebar = document.getElementById("vt-sidebar");
+  const handleX = document.getElementById("vt-resize-handle-x");
+
+  let resizingX = false;
+
+  handleX.addEventListener("mousedown", () => {
+    resizingX = true;
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!resizingX) return;
+
+    const width = window.innerWidth - e.clientX;
+    if (width > 150 && width < 600) {
+      sidebar.style.width = width + "px";
+    }
+  });
+
+  document.addEventListener("mouseup", () => {
+    resizingX = false;
+  });
+
+  /* VERTICAL RESIZE */
+  const handleY = document.getElementById("vt-resize-handle-y");
+
+  let resizingY = false;
+
+  handleY.addEventListener("mousedown", () => {
+    resizingY = true;
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (!resizingY) return;
+
+    const rect = sidebar.getBoundingClientRect();
+    const offsetY = e.clientY - rect.top;
+
+    const min = 100;
+    const max = rect.height - 120;
+
+    if (offsetY > min && offsetY < max) {
+      sidebar.style.setProperty("--notes-h", offsetY + "px");
+    }
+  });
+
+  document.addEventListener("mouseup", () => {
+    resizingY = false;
+  });
+
+});
+
+/* DICE */
+let history = [];
+
+function roll(sides) {
+  const result = Math.floor(Math.random() * sides) + 1;
+  const entry = `W${sides}: ${result}`;
+
+  document.getElementById("dice-result").textContent = entry;
+
+  history.unshift(entry);
+  history = history.slice(0, 5);
+
+  document.getElementById("dice-history").innerHTML =
+    "<strong>Letzte Würfe:</strong><br>" +
+    history.map(h => "• " + h).join("<br>");
+}
+</script>
