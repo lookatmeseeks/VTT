@@ -194,8 +194,8 @@
 
         #wiki-button {
             position: absolute;
-            top: 10px;
-            left: 125px;
+            top: 0;
+            left: 0;
             z-index: 100000;
             padding: 8px 12px;
             cursor: pointer;
@@ -203,8 +203,8 @@
 
         #link-button {
             position: absolute;
-            top: 10px;
-            left: 190px;
+            top: 0;
+            left: 0;
             z-index: 100000;
             padding: 8px 12px;
             cursor: pointer;
@@ -212,8 +212,8 @@
 
         #unlink-button {
             position: absolute;
-            top: 10px;
-            left: 255px;
+            top: 0;
+            left: 0;
             z-index: 100000;
             padding: 8px 12px;
             cursor: pointer;
@@ -225,8 +225,8 @@
 
         #placed-button {
             position: absolute;
-            top: 10px;
-            left: 335px;
+            bottom: 10px;
+            right: 10px;
             z-index: 100000;
             padding: 8px 12px;
             cursor: pointer;
@@ -238,8 +238,8 @@
 
         #dice-button {
             position: absolute;
-            top: 10px;
-            left: 440px;
+            top: 0;
+            left: 0;
             z-index: 100000;
             padding: 8px 12px;
             cursor: pointer;
@@ -442,10 +442,10 @@
     <div id="world"></div>
     <button id="delete-button">Delete selected</button>
     <button id="wiki-button">Wiki</button>
+    <button id="dice-button">Dice</button>
     <button id="link-button" title="Select 2 or more images (hold Shift), then click Link">Link</button>
     <button id="unlink-button" title="Remove the selected image(s) from their link" disabled>Unlink</button>
     <button id="placed-button" title="Images that were set in place" disabled>Placed images</button>
-    <button id="dice-button">Dice</button>
     <div id="placed-panel" class="placed-panel"></div>
     <div id="dice-panel" class="dice-panel">
         <div class="dice-options">
@@ -459,6 +459,7 @@
         <div id="dice-selection" class="dice-selection"></div>
         <button id="dice-roll-button" class="dice-roll-button" type="button">Roll</button>
         <button id="dice-clear-button" class="dice-clear-button" type="button">Clear</button>
+        <button id="dice-result-clear-button" class="dice-clear-button" type="button">Clear results</button>
         <div id="dice-result" class="dice-result"></div>
     </div>
     <div id="image-picker" class="image-picker"></div>
@@ -658,6 +659,7 @@
     };
 
     let selectedDice = [];
+    let localDiceResult = null;
 
     function renderDiceSelection() {
         diceSelection.innerHTML = "";
@@ -705,7 +707,7 @@
     function renderDiceResult() {
         diceResult.innerHTML = "";
 
-        const roll = roomState.diceRoll;
+        const roll = localDiceResult;
 
         if (!roll) {
             return;
@@ -775,6 +777,7 @@
             rolledAt: Date.now()
         };
 
+        localDiceResult = roomState.diceRoll;
         renderDiceResult();
         diceRollButton.disabled = true;
         await saveRoom();
@@ -816,8 +819,15 @@
         };
 
         renderDiceResult();
+        localDiceResult = roomState.diceRoll;
         diceRollButton.disabled = false;
         await saveRoom();
+    });
+
+    document.getElementById("dice-result-clear-button").addEventListener("click", event => {
+        event.stopPropagation();
+        localDiceResult = null;
+        renderDiceResult();
     });
 
     diceClearButton.addEventListener("click", event => {
