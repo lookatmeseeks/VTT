@@ -236,6 +236,73 @@
             cursor: default;
         }
 
+        #dice-button {
+            position: absolute;
+            top: 10px;
+            left: 440px;
+            z-index: 100000;
+            padding: 8px 12px;
+            cursor: pointer;
+        }
+
+        .dice-panel {
+            position: absolute;
+            display: none;
+            top: 50px;
+            left: 440px;
+            min-width: 260px;
+            max-width: 340px;
+            z-index: 100001;
+            padding: 8px;
+            background: #222;
+            border: 1px solid #777;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            color: white;
+        }
+
+        .dice-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            margin-bottom: 8px;
+        }
+
+        .dice-options button,
+        .dice-roll-button,
+        .dice-clear-button,
+        .dice-remove-button {
+            padding: 5px 8px;
+            cursor: pointer;
+        }
+
+        .dice-selection {
+            min-height: 24px;
+            margin-bottom: 8px;
+        }
+
+        .dice-selection-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 2px 0;
+        }
+
+        .dice-result {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #555;
+        }
+
+        .dice-result-total {
+            margin-top: 6px;
+            font-weight: bold;
+        }
+
+        .dice-empty {
+            color: #aaa;
+        }
+
         .placed-panel {
             position: absolute;
             display: none;
@@ -356,7 +423,23 @@
     <button id="link-button" title="Select 2 or more images (hold Shift), then click Link">Link</button>
     <button id="unlink-button" title="Remove the selected image(s) from their link" disabled>Unlink</button>
     <button id="placed-button" title="Images that were set in place" disabled>Placed images</button>
+    <button id="dice-button">Dice</button>
     <div id="placed-panel" class="placed-panel"></div>
+    <div id="dice-panel" class="dice-panel">
+        <div class="dice-options">
+            <button type="button" data-dice-sides="4">D4</button>
+            <button type="button" data-dice-sides="6">D6</button>
+            <button type="button" data-dice-sides="8">D8</button>
+            <button type="button" data-dice-sides="10">D10</button>
+            <button type="button" data-dice-sides="12">D12</button>
+            <button type="button" data-dice-sides="20">D20</button>
+            <button type="button" data-dice-sides="40">D40</button>
+        </div>
+        <div id="dice-selection" class="dice-selection"></div>
+        <button id="dice-roll-button" class="dice-roll-button" type="button">Roll</button>
+        <button id="dice-clear-button" class="dice-clear-button" type="button">Clear</button>
+        <div id="dice-result" class="dice-result"></div>
+    </div>
     <div id="image-picker" class="image-picker"></div>
 </div>
 
@@ -379,6 +462,12 @@
     const unlinkButton = document.getElementById("unlink-button");
     const placedButton = document.getElementById("placed-button");
     const placedPanel = document.getElementById("placed-panel");
+    const diceButton = document.getElementById("dice-button");
+    const dicePanel = document.getElementById("dice-panel");
+    const diceSelection = document.getElementById("dice-selection");
+    const diceRollButton = document.getElementById("dice-roll-button");
+    const diceClearButton = document.getElementById("dice-clear-button");
+    const diceResult = document.getElementById("dice-result");
 
     // Handles and notes scale with the image: factor = current width divided
     // by the image's original (natural) width, limited to this range so the
@@ -543,8 +632,153 @@
         new URLSearchParams(window.location.search).get("room") || "default";
 
     let roomState = {
-        images: []
+        images: [],
+        diceRoll: null
     };
+
+    let selectedDice = [];
+
+    function renderDiceSelection() {
+        diceSelection.innerHTML = "";
+
+        if (selectedDice.length === 0) {
+            diceSelection.innerHTML = '<div class="dice-empty">No dice selected.</div>';
+            return;
+        }
+
+        const counts = {};
+        for (const sides of selectedDice) {
+            counts[sides] = (counts[sides] || 0) + 1;
+        }
+
+        Object.keys(counts)
+            .map(Number)
+            .sort((a, b) => a - b)
+            .forEach(sides => {
+                const row = document.createElement("div");
+                row.className = "dice-selection-row";
+
+                const label = document.createElement("span");
+                label.textContent = "D" + sides + " × " + counts[sides];
+
+                const removeButton = document.createElement("button");
+                removeButton.className = "dice-remove-button";
+                removeButton.type = "button";
+                removeButton.textContent = "−";
+                removeButton.title = "Remove one D" + sides;
+
+                removeButton.addEventListener("click", () => {
+                    const index = selectedDice.indexOf(sides);
+                    if (index >= 0) {
+                        selectedDice.splice(index, 1);
+                    }
+                    renderDiceSelection();
+                });
+
+                row.appendChild(label);
+                row.appendChild(removeButton);
+                diceSelection.appendChild(row);
+            });
+    }
+
+    function renderDiceResult() {
+        diceResult.innerHTML = "";
+
+        const roll = roomState.diceRoll;
+
+        if (!roll || !roll.groups || roll.groups.length === 0) {
+            return;
+        }
+
+        for (const group of roll.groups) {
+            const line = document.createElement("div");
+            line.textContent = "D" + group.sides + ": " + group.results.join(", ");
+            diceResult.appendChild(line);
+        }
+
+        const total = document.createElement("div");
+        total.className = "dice-result-total";
+        total.textContent = "Total: " + roll.total;
+        diceResult.appendChild(total);
+    }
+
+    function addDie(sides) {
+        selectedDice.push(sides);
+        renderDiceSelection();
+    }
+
+    function randomDieResult(sides) {
+        return Math.floor(Math.random() * sides) + 1;
+    }
+
+    document.querySelectorAll("[data-dice-sides]").forEach(button => {
+        button.addEventListener("click", event => {
+            event.stopPropagation();
+            addDie(Number(button.dataset.diceSides));
+        });
+    });
+
+    diceButton.addEventListener("click", event => {
+        event.stopPropagation();
+        dicePanel.style.display =
+            dicePanel.style.display === "block" ? "none" : "block";
+    });
+
+    dicePanel.addEventListener("mousedown", event => {
+        event.stopPropagation();
+    });
+
+    diceRollButton.addEventListener("click", async event => {
+        event.stopPropagation();
+
+        if (selectedDice.length === 0) {
+            return;
+        }
+
+        const groups = [];
+        const counts = {};
+
+        for (const sides of selectedDice) {
+            counts[sides] = (counts[sides] || 0) + 1;
+        }
+
+        let total = 0;
+
+        Object.keys(counts)
+            .map(Number)
+            .sort((a, b) => a - b)
+            .forEach(sides => {
+                const results = [];
+
+                for (let i = 0; i < counts[sides]; i++) {
+                    const result = randomDieResult(sides);
+                    results.push(result);
+                    total += result;
+                }
+
+                groups.push({
+                    sides,
+                    results
+                });
+            });
+
+        roomState.diceRoll = {
+            groups,
+            total,
+            rolledAt: Date.now()
+        };
+
+        renderDiceResult();
+        await saveRoom();
+    });
+
+    diceClearButton.addEventListener("click", event => {
+        event.stopPropagation();
+        selectedDice = [];
+        renderDiceSelection();
+    });
+
+    renderDiceSelection();
 
     const roomChannel = supabaseClient.channel("room:" + roomId);
 
@@ -587,6 +821,7 @@
         }
 
         updateImageLayers();
+        renderDiceResult();
     }
 
     function updateImageLayers() {
