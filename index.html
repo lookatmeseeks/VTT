@@ -294,6 +294,28 @@
             border-top: 1px solid #555;
         }
 
+        .dice-rolling {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dice-spinner {
+            width: 16px;
+            height: 16px;
+            border: 3px solid #777;
+            border-top-color: white;
+            border-radius: 50%;
+            box-sizing: border-box;
+            animation: dice-spin 0.7s linear infinite;
+        }
+
+        @keyframes dice-spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
         .dice-result-total {
             margin-top: 6px;
             font-weight: bold;
@@ -433,7 +455,6 @@
             <button type="button" data-dice-sides="10">D10</button>
             <button type="button" data-dice-sides="12">D12</button>
             <button type="button" data-dice-sides="20">D20</button>
-            <button type="button" data-dice-sides="40">D40</button>
         </div>
         <div id="dice-selection" class="dice-selection"></div>
         <button id="dice-roll-button" class="dice-roll-button" type="button">Roll</button>
@@ -647,7 +668,7 @@
         }
 
         const counts = {};
-        for (const sides of selectedDice) {
+        for (const sides of diceToRoll) {
             counts[sides] = (counts[sides] || 0) + 1;
         }
 
@@ -686,7 +707,17 @@
 
         const roll = roomState.diceRoll;
 
-        if (!roll || !roll.groups || roll.groups.length === 0) {
+        if (!roll) {
+            return;
+        }
+
+        if (roll.rolling) {
+            diceResult.innerHTML =
+                '<div class="dice-rolling"><span class="dice-spinner"></span><span>Rolling...</span></div>';
+            return;
+        }
+
+        if (!roll.groups || roll.groups.length === 0) {
             return;
         }
 
@@ -731,9 +762,24 @@
     diceRollButton.addEventListener("click", async event => {
         event.stopPropagation();
 
-        if (selectedDice.length === 0) {
+        if (selectedDice.length === 0 || diceRollButton.disabled) {
             return;
         }
+
+        const diceToRoll = [...selectedDice];
+
+        roomState.diceRoll = {
+            rolling: true,
+            groups: [],
+            total: 0,
+            rolledAt: Date.now()
+        };
+
+        renderDiceResult();
+        diceRollButton.disabled = true;
+        await saveRoom();
+
+        await new Promise(resolve => setTimeout(resolve, 800));
 
         const groups = [];
         const counts = {};
@@ -763,12 +809,14 @@
             });
 
         roomState.diceRoll = {
+            rolling: false,
             groups,
             total,
             rolledAt: Date.now()
         };
 
         renderDiceResult();
+        diceRollButton.disabled = false;
         await saveRoom();
     });
 
