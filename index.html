@@ -246,18 +246,32 @@
         }
 
         .dice-panel {
-            position: absolute;
+            position: fixed;
             display: none;
-            top: 50px;
-            left: 440px;
+            top: 80px;
+            left: 300px;
             min-width: 260px;
             max-width: 340px;
             z-index: 100001;
-            padding: 8px;
             background: #222;
             border: 1px solid #777;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
             color: white;
+        }
+
+        .dice-titlebar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 8px;
+            background: #181818;
+            color: white;
+            cursor: move;
+            user-select: none;
+        }
+
+        .dice-content {
+            padding: 8px;
         }
 
         .dice-options {
@@ -448,6 +462,10 @@
     <button id="placed-button" title="Images that were set in place" disabled>Placed images</button>
     <div id="placed-panel" class="placed-panel"></div>
     <div id="dice-panel" class="dice-panel">
+        <div id="dice-titlebar" class="dice-titlebar">
+            <span>Dice</span>
+        </div>
+        <div class="dice-content">
         <div class="dice-options">
             <button type="button" data-dice-sides="4">D4</button>
             <button type="button" data-dice-sides="6">D6</button>
@@ -461,6 +479,7 @@
         <button id="dice-clear-button" class="dice-clear-button" type="button">Clear</button>
         <button id="dice-result-clear-button" class="dice-clear-button" type="button">Clear results</button>
         <div id="dice-result" class="dice-result"></div>
+        </div>
     </div>
     <div id="image-picker" class="image-picker"></div>
 </div>
@@ -486,6 +505,7 @@
     const placedPanel = document.getElementById("placed-panel");
     const diceButton = document.getElementById("dice-button");
     const dicePanel = document.getElementById("dice-panel");
+    const diceTitlebar = document.getElementById("dice-titlebar");
     const diceSelection = document.getElementById("dice-selection");
     const diceRollButton = document.getElementById("dice-roll-button");
     const diceClearButton = document.getElementById("dice-clear-button");
@@ -755,6 +775,33 @@
         event.stopPropagation();
         dicePanel.style.display =
             dicePanel.style.display === "block" ? "none" : "block";
+    });
+
+    let diceDrag = null;
+
+    diceTitlebar.addEventListener("mousedown", event => {
+        const rect = dicePanel.getBoundingClientRect();
+
+        diceDrag = {
+            offsetX: event.clientX - rect.left,
+            offsetY: event.clientY - rect.top
+        };
+
+        event.preventDefault();
+        event.stopPropagation();
+    });
+
+    document.addEventListener("mousemove", event => {
+        if (!diceDrag) {
+            return;
+        }
+
+        dicePanel.style.left = (event.clientX - diceDrag.offsetX) + "px";
+        dicePanel.style.top = (event.clientY - diceDrag.offsetY) + "px";
+    });
+
+    document.addEventListener("mouseup", () => {
+        diceDrag = null;
     });
 
     dicePanel.addEventListener("mousedown", event => {
