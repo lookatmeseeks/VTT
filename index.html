@@ -44,8 +44,11 @@
         }
 
         .image.selected {
-            outline: 3px solid lightblue !important;
-            outline-offset: 2px;
+            outline: none !important;
+        }
+
+        .controls-container.selected-outline {
+            border-color: lightblue;
         }
 
         #delete-button {
@@ -61,6 +64,8 @@
             position: absolute;
             pointer-events: none;
             transform-origin: center center;
+            box-sizing: border-box;
+            border: 3px solid transparent;
             /* The container is rotated, which makes it its own stacking
                context, so the z-index of the handles inside it does not
                matter outside. It must be above every image layer. */
@@ -2119,7 +2124,8 @@
             controls.style.top = top + "px";
             controls.style.width = width + "px";
             controls.style.height = height + "px";
-            controls.style.transform = "rotate(" + angle + "deg)";
+            controls.style.transform = "none";
+            controls.classList.add("selected-outline");
 
             // The controls live inside #world, so they already inherit
             // the world's pan/zoom transform. Their offsets therefore stay
@@ -2375,7 +2381,7 @@
             const centerY = rect.top + rect.height / 2;
 
             const cornerAngle =
-                Math.atan2(startHeight / 2, startWidth / 2) + angle;
+                Math.atan2(startHeight / 2, startWidth / 2);
             const cornerDirectionX = Math.cos(cornerAngle);
             const cornerDirectionY = Math.sin(cornerAngle);
 
