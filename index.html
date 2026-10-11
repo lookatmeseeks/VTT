@@ -1167,6 +1167,69 @@
 
     initializeRoom();
 
+    // Copy and paste selected canvas images with Ctrl+C / Ctrl+V.
+    // The image URL is reused; only its canvas instance is duplicated.
+    let copiedImageState = null;
+
+    document.addEventListener("keydown", async event => {
+        if (!(event.ctrlKey || event.metaKey) || event.altKey) {
+            return;
+        }
+
+        const key = event.key.toLowerCase();
+        if (key !== "c" && key !== "v") {
+            return;
+        }
+
+        // Do not intercept normal copy/paste while editing text or inputs.
+        const target = event.target;
+        if (target instanceof HTMLElement &&
+            (target.isContentEditable || target.matches("input, textarea, select"))) {
+            return;
+        }
+
+        if (key === "c") {
+            const selected = document.querySelector(".image.selected");
+            if (!selected) {
+                return;
+            }
+
+            const state = getImageState(selected);
+            if (!state) {
+                return;
+            }
+
+            event.preventDefault();
+            copiedImageState = { ...state };
+            return;
+        }
+
+        if (!copiedImageState) {
+            return;
+        }
+
+        event.preventDefault();
+
+        const duplicate = {
+            ...copiedImageState,
+            id: crypto.randomUUID(),
+            left: (Number(copiedImageState.left) || 0) + 30,
+            top: (Number(copiedImageState.top) || 0) + 30,
+            placed: false,
+            locked: false
+        };
+
+        // A pasted copy is independent of the original and starts unlinked.
+        delete duplicate.linkId;
+        delete duplicate.initiative;
+        roomState.images.push(duplicate);
+
+        const image = createImageFromState(duplicate);
+        updateImageLayers();
+        selectImage(image);
+        await saveRoom();
+    });
+
     deleteButton.addEventListener("click", async event => {
         event.stopPropagation();
 
